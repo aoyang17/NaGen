@@ -1,0 +1,37 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+/.pylibs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+.DS_Store
+.idea/
+.vscode/
+
+# Durable generated outputs live under /mnt/data2/aobo and are exposed here
+# only through the documented data/ and experiments/ symlinks.
+/data
+/experiments/exp_*
+/runs
+
+# Models and numerical jobs are reproducible artifacts, not source code.
+*.ckpt
+*.pt
+*.pth
+*.traj
+*.log

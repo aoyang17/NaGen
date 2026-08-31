@@ -1,0 +1,20 @@
+{
+  "experiment_id": "exp_2026-08-26_02",
+  "definition": "E_hull=E_UMA-E_ref_UMA",
+  "support_policy": "all_mp2020_compatible_entries",
+  "phase_cache": "/mnt/data2/aobo/NaGen/experiments/exp_2026-08-26/cache/mp_phase_entries.json",
+  "composition_pool": "/mnt/data2/aobo/NaGen/experiments/exp_2026-08-26/compositions/generated_pool_merged.json",
+  "uma_checkpoint": "/mnt/data2/aobo/NaGen/models/uma/uma-m-1p1.pt",
+  "uma_checkpoint_sha256": "c30034edbf2e127f703f814cacb632661767da99b3e71c5b2ee5290510a52d68",
+  "task_name": "omat",
+  "relaxation": {
+    "fire_fmax_eV_A": 0.05,
+    "fire_steps": 1500,
+    "fire_variables": "cell_and_positions_via_ExpCellFilter",
+    "bfgs_fmax_eV_A": 0.01,
+    "bfgs_steps": 1500,
+    "bfgs_variables": "positions_only"
+  },
+  "hull_threshold_eV_atom": 0.15,
+  "credentials_persisted": false
+}
