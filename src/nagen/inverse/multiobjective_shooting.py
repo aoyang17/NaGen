@@ -9,6 +9,12 @@ from typing import Any, Callable
 
 import torch
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:  # pragma: no cover - optional runtime display
+    def tqdm(iterable, **kwargs):
+        return iterable
+
 from .guidance import terminal_constraint_terms
 from .model import CrystalState, CrystalVectorField
 from .novelty import NoveltyIndex, crystal_descriptor
@@ -54,6 +60,8 @@ def _unflatten(vector: torch.Tensor, tensors: list[torch.Tensor]) -> list[torch.
 
 @dataclass(frozen=True)
 class ShootingConfig:
+    # Joint optimization starts immediately after the first unconditional
+    # trajectory; no objective-free restoration phase by default.
     restoration_steps: int = 0
     guidance_steps: int = 40
     learning_rate: float = 0.01
@@ -72,6 +80,9 @@ class ShootingConfig:
     distance_weight: float = 20.0
     p_coordination_weight: float = 8.0
     fe_coordination_weight: float = 5.0
+    # The hull threshold is an optimization constraint, not a post-filter.
+    hull_threshold_eV_atom: float = 0.150
+    hull_penalty_weight: float = 100.0
 
 
 @dataclass
@@ -84,12 +95,20 @@ class ShootingResult:
 
 
 class CrystalDesignProblem:
-    """Endpoint evaluator with a cached MP constant and differentiable UMA energy."""
+    """Endpoint evaluator on the all-UMA caliber with a differentiable UMA energy.
+
+    Both terms of `E_hull` are UMA energies: the candidate from `energy_per_atom`
+    and the reference from `UMAHullCache.get`.  Mixing in an MP hull or an MP2020
+    compatibility correction puts the two terms on different energy scales and is
+    forbidden by the 8/27 protocol, so those arguments are rejected.
+    """
 
     def __init__(
         self, model: CrystalVectorField, mask: torch.Tensor,
         energy_per_atom: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         uma_hull_reference_eV_atom: float, novelty_index: NoveltyIndex | None = None,
+        mp2020_hull_reference_eV_atom: float | None = None,
+        mp2020_correction_eV_atom: float = 0.0,
         fe_coordination_prior: tuple[float, float, float] | None = None,
         constraint_margin_A: float = 0.035,
     ) -> None:
@@ -97,6 +116,14 @@ class CrystalDesignProblem:
         self.mask = mask
         self.energy_per_atom = energy_per_atom
         self.uma_hull_reference_eV_atom = float(uma_hull_reference_eV_atom)
+        # Kept in the signature so stale callers fail loudly instead of silently
+        # changing which energy scale their numbers are on.
+        if mp2020_hull_reference_eV_atom is not None or mp2020_correction_eV_atom:
+            raise ValueError(
+                "E_hull must be scored on the all-UMA caliber; the MP2020 "
+                "cross-scale reference and correction are forbidden by the 8/27 "
+                "protocol.  Pass only uma_hull_reference_eV_atom."
+            )
         self.novelty_index = novelty_index
         self.fe_coordination_prior = fe_coordination_prior
         if constraint_margin_A < 0:
@@ -189,7 +216,11 @@ class ShootingFlowRunner:
         scale_novelty = max(config.objective_scales[1], 1e-12)
         status = "complete"
         total_steps = config.restoration_steps + config.guidance_steps
-        for step in range(total_steps):
+        progress = tqdm(
+            range(total_steps), desc="M0 joint optimization", unit="step",
+            leave=True,
+        )
+        for step in progress:
             restoring = step < config.restoration_steps
             optimizer.zero_grad(set_to_none=True)
             source = CrystalState(atom_state, frac, lattice)
@@ -219,10 +250,18 @@ class ShootingFlowRunner:
                 self.problem.constraint_terms(terminal)
                 if config.use_constraints else {}
             )
+            if config.use_hull and "E_hull" in values:
+                # Exact hard-gate target represented during optimization by an
+                # augmented-Lagrangian hinge. The final evaluator still applies
+                # the boolean <= threshold gate.
+                constraints["hull_threshold"] = torch.relu(
+                    values["E_hull"] - config.hull_threshold_eV_atom
+                )
             constraint_weights = {
                 "distance": config.distance_weight,
                 "p_coordination": config.p_coordination_weight,
                 "fe_coordination": config.fe_coordination_weight,
+                "hull_threshold": config.hull_penalty_weight,
             }
             if restoring:
                 augmented = sum(
@@ -288,6 +327,11 @@ class ShootingFlowRunner:
                 "multipliers": dict(multipliers),
                 "constraints": {name: float(value.detach()) for name, value in constraints.items()},
             })
+            if not restoring and "E_hull" in values:
+                progress.set_postfix(
+                    E_hull=f"{float(values['E_hull'].detach()):.3f}",
+                    violation=f"{float(constraints.get('hull_threshold', torch.zeros_like(values['E_hull'])).detach()):.3f}",
+                )
         z0_star = CrystalState(atom_state.detach(), frac.detach(), lattice.detach())
         with torch.no_grad():
             terminal = integrate_flow(

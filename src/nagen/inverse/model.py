@@ -204,8 +204,23 @@ def flow_matching_loss(
     coordinate_noise_sigma: float = 0.50,
     geometry_only: bool = False,
     geometry_validity_weight: float = 0.0,
+    coupling: str = "noise",
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Joint rectified flow loss with a minimum-image torus path for X."""
+    """Joint rectified flow loss with a minimum-image torus path for X.
+
+    ``coupling`` selects how the X source is paired with the target:
+
+    ``"noise"``
+        The historical behaviour, ``wrap(target + coordinate_noise_sigma * eps)``.
+    ``"assignment"``
+        Draw the source exactly uniform -- the same law `sample.random_source`
+        draws at inference -- then permute it within each element species to
+        minimise total squared periodic displacement.  Permuting i.i.d. uniform
+        points leaves the marginal exactly uniform, so this buys a short,
+        low-variance regression target at no cost to the source distribution.
+        See `nagen.inverse.coupling` for why the ``"noise"`` coupling carries
+        almost no information at sigma = 0.5.
+    """
     batch, atoms = target_types.shape
     device = target_frac.device
     dtype = target_frac.dtype
@@ -214,11 +229,25 @@ def flow_matching_loss(
         (target_types - 1).clamp_min(0), num_classes=base_model.config.vocab_size
     ).to(dtype) * type_scale
     source_atom = target_atom if geometry_only else torch.randn_like(target_atom)
-    # Wrapped N(0, 0.5^2) has an almost-uniform torus marginal while retaining
-    # a site correspondence for set-valued crystal coordinates.
-    source_frac = torch.remainder(
-        target_frac + coordinate_noise_sigma * torch.randn_like(target_frac), 1.0
-    )
+    if coupling == "assignment":
+        from .coupling import assignment_source_frac
+
+        source_frac = assignment_source_frac(
+            target_frac,
+            target_types,
+            mask,
+            base_model._lattice_matrix(target_lattice, mask.sum(dim=1)),
+        )
+    elif coupling == "noise":
+        # Wrapped N(0, 0.5^2) has an almost-uniform torus marginal.  It was also
+        # meant to retain a site correspondence, but at sigma = 0.5 the pair
+        # offset law is uniform to within 1e-4, so that correspondence is not
+        # actually present -- see nagen.inverse.coupling.
+        source_frac = torch.remainder(
+            target_frac + coordinate_noise_sigma * torch.randn_like(target_frac), 1.0
+        )
+    else:
+        raise ValueError(f"unsupported coupling: {coupling!r}")
     source_lattice = torch.randn_like(target_lattice)
     t = torch.rand(batch, 1, device=device, dtype=dtype).clamp_(1e-4, 1.0 - 1e-4)
     atom_t = (

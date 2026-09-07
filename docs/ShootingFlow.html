@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShootingFlow 生成优化框架</title>
+  <style>
+    :root {
+      --navy: #132a46;
+      --ink: #1d2b3d;
+      --muted: #607086;
+      --line: #aab9ca;
+      --paper: #edf2f7;
+      --blue: #e8f3ff;
+      --blue-edge: #4d86bd;
+      --teal: #e4f6f2;
+      --teal-edge: #318b80;
+      --amber: #fff4da;
+      --amber-edge: #cb8720;
+      --violet: #f1ebff;
+      --violet-edge: #765bb1;
+      --rose: #fff0ef;
+      --rose-edge: #bd615c;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    body { padding: 18px; }
+
+    .page {
+      width: min(1600px, 100%);
+      min-height: calc(100vh - 36px);
+      margin: 0 auto;
+      padding: 24px 28px 22px;
+      background: #fff;
+      border: 1px solid #d8e0e9;
+      border-radius: 18px;
+      box-shadow: 0 14px 38px rgba(24, 46, 74, .10);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 15px;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 13px;
+      border-bottom: 2px solid #e4eaf1;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(27px, 2.5vw, 42px);
+      line-height: 1.05;
+      letter-spacing: .015em;
+    }
+
+    .subtitle {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: .08em;
+    }
+
+    .core-tag {
+      flex: none;
+      padding: 7px 13px;
+      border: 1px solid var(--violet-edge);
+      border-radius: 999px;
+      background: var(--violet);
+      color: #57428a;
+      font-weight: 750;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .train {
+      display: grid;
+      grid-template-columns: 1fr 42px 2.05fr 42px 1fr;
+      align-items: stretch;
+      padding: 12px 15px;
+      border: 1px solid #d6e0eb;
+      border-radius: 13px;
+      background: #f8fafc;
+    }
+
+    .train .cell { padding: 7px 12px; text-align: center; }
+    .train strong { display: block; color: var(--navy); font-size: 14px; }
+    .train .eq { margin-top: 4px; font-size: 15px; }
+
+    .arrow {
+      position: relative;
+      min-height: 28px;
+    }
+
+    .arrow::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 6px;
+      right: 8px;
+      height: 2px;
+      background: var(--line);
+      transform: translateY(-50%);
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 3px;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 9px solid var(--line);
+      transform: translateY(-50%);
+    }
+
+    .main-flow {
+      position: relative;
+      display: grid;
+      grid-template-columns: .92fr 38px 1.22fr 38px 1.12fr 38px 1.50fr 38px 1.28fr;
+      align-items: stretch;
+      min-height: 300px;
+      padding-bottom: 53px;
+    }
+
+    .box {
+      position: relative;
+      min-width: 0;
+      padding: 16px 16px 14px;
+      border: 1.5px solid;
+      border-radius: 14px;
+      box-shadow: 0 5px 15px rgba(25, 45, 73, .06);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .box.blue { background: var(--blue); border-color: var(--blue-edge); }
+    .box.teal { background: var(--teal); border-color: var(--teal-edge); }
+    .box.amber { background: var(--amber); border-color: var(--amber-edge); }
+    .box.violet { background: var(--violet); border-color: var(--violet-edge); }
+    .box.rose { background: var(--rose); border-color: var(--rose-edge); }
+
+    .step {
+      position: absolute;
+      top: 10px;
+      left: 11px;
+      display: grid;
+      place-items: center;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .box h2 {
+      margin: 7px 0 12px;
+      text-align: center;
+      color: var(--navy);
+      font-size: clamp(15px, 1.25vw, 20px);
+      line-height: 1.25;
+    }
+
+    .eq {
+      font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+      color: #16253a;
+      line-height: 1.45;
+    }
+
+    .display {
+      margin: 6px 0;
+      text-align: center;
+      font-size: clamp(15px, 1.1vw, 18px);
+    }
+
+    .small { color: var(--muted); font-size: 12px; text-align: center; }
+    .divider { height: 1px; margin: 8px 0; background: rgba(78, 94, 116, .19); }
+
+    .eval-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .eval-item {
+      padding: 8px 9px;
+      border: 1px solid rgba(82, 65, 140, .24);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .68);
+    }
+
+    .eval-item strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #4e3d7d;
+      font-size: 12px;
+    }
+
+    .eval-item .eq { font-size: 14px; text-align: center; }
+
+    .bvp-lines {
+      padding: 7px 9px;
+      border-left: 3px solid var(--rose-edge);
+      background: rgba(255,255,255,.58);
+      font-size: clamp(13px, .95vw, 15px);
+    }
+
+    .bvp-lines div + div { margin-top: 4px; }
+
+    .loop {
+      position: absolute;
+      left: 6.8%;
+      right: 6.8%;
+      bottom: 3px;
+      height: 37px;
+      border-right: 2px solid var(--teal-edge);
+      border-bottom: 2px solid var(--teal-edge);
+      border-left: 2px solid var(--teal-edge);
+      border-radius: 0 0 14px 14px;
+    }
+
+    .loop::before {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: -1px;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 10px solid var(--teal-edge);
+    }
+
+    .loop-label {
+      position: absolute;
+      left: 50%;
+      bottom: -3px;
+      padding: 0 12px;
+      background: #fff;
+      color: #27786f;
+      font-size: 12px;
+      font-weight: 750;
+      transform: translate(-50%, 50%);
+      white-space: nowrap;
+    }
+
+    footer {
+      display: grid;
+      grid-template-columns: 1.45fr 1fr;
+      gap: 14px;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 2px solid #e4eaf1;
+    }
+
+    .objective {
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--navy);
+      color: white;
+      text-align: center;
+      font-size: clamp(14px, 1.15vw, 18px);
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    sub, sup { line-height: 0; }
+
+    @media (max-width: 1050px) {
+      body { padding: 0; }
+      .page { border: 0; border-radius: 0; }
+      .main-flow { grid-template-columns: 1fr; gap: 10px; padding-bottom: 0; }
+      .main-flow > .arrow { height: 28px; transform: rotate(90deg); }
+      .loop { display: none; }
+      .train { grid-template-columns: 1fr; }
+      .train > .arrow { height: 26px; transform: rotate(90deg); }
+      footer { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      @page { size: A4 landscape; margin: 8mm; }
+      html, body { background: white; }
+      body { padding: 0; }
+      .page {
+        width: 100%;
+        min-height: 190mm;
+        padding: 10mm;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <div>
+      <h1>ShootingFlow 生成优化框架</h1>
+      <div class="subtitle">UNCONDITIONAL FLOW MATCHING · END-POINT SURROGATE · BOUNDARY-VALUE OPTIMIZATION</div>
+    </div>
+    <div class="core-tag">冻结生成模型，仅优化 initial noise</div>
+  </header>
+
+  <section class="train" aria-label="无条件 Flow Matching 训练">
+    <div class="cell">
+      <strong>完整晶体数据</strong>
+      <div class="eq">x<sub>1</sub> ∼ p<sub>data</sub>, &nbsp; z<sub>0</sub> ∼ 𝒩(0,I)</div>
+    </div>
+    <div class="arrow" aria-hidden="true"></div>
+    <div class="cell">
+      <strong>完全无条件 Flow Matching</strong>
+      <div class="eq">x<sub>t</sub> = (1−t)z<sub>0</sub> + tx<sub>1</sub>, &nbsp; 𝓛<sub>FM</sub> = 𝔼 ‖v<sub>θ</sub>(x<sub>t</sub>,t) − (x<sub>1</sub>−z<sub>0</sub>)‖²</div>
+    </div>
+    <div class="arrow" aria-hidden="true"></div>
+    <div class="cell">
+      <strong>冻结生成向量场</strong>
+      <div class="eq">v<sub>θ</sub> &nbsp; fixed</div>
+    </div>
+  </section>
+
+  <section class="main-flow" aria-label="ShootingFlow 优化闭环">
+    <article class="box blue">
+      <span class="step">1</span>
+      <h2>初始噪声</h2>
+      <div class="eq display">z<sub>0</sub><sup>(k)</sup> ∼ 𝒩(0,I)</div>
+      <div class="small">唯一连续优化变量</div>
+    </article>
+
+    <div class="arrow" aria-hidden="true"></div>
+
+    <article class="box teal">
+      <span class="step">2</span>
+      <h2>完整前向生成</h2>
+      <div class="eq display">dx/dt = v<sub>θ</sub>(x,t)</div>
+      <div class="eq display">x(0)=z<sub>0</sub><sup>(k)</sup> → x(1)=x<sub>1</sub><sup>(k)</sup></div>
+      <div class="small">每次更新后从 t=0 重新积分至 t=1</div>
+    </article>
+
+    <div class="arrow" aria-hidden="true"></div>
+
+    <article class="box amber">
+      <span class="step">3</span>
+      <h2>完整终点晶体</h2>
+      <div class="eq display">𝒞<sup>(k)</sup> = Decode[x<sub>1</sub><sup>(k)</sup>]</div>
+      <div class="small">坐标 · 晶格 · 组成</div>
+    </article>
+
+    <div class="arrow" aria-hidden="true"></div>
+
+    <article class="box violet">
+      <span class="step">4</span>
+      <h2>终点评估与新梯度桥</h2>
+      <div class="eval-grid">
+        <div class="eval-item">
+          <strong>新训练的 surrogate</strong>
+          <div class="eq">Ê<sub>hull</sub> = S<sub>ψ</sub>(𝒞)</div>
+        </div>
+        <div class="eval-item">
+          <strong>结合松炜数值方程</strong>
+          <div class="eq">F(u,𝒞)=0, &nbsp; Φ=Φ(u,𝒞)</div>
+        </div>
+        <div class="eval-item">
+          <strong>隐式梯度传递</strong>
+          <div class="eq">F<sub>u</sub><sup>T</sup>μ=Φ<sub>u</sub><sup>T</sup>, &nbsp; dΦ/d𝒞=Φ<sub>𝒞</sub>−μ<sup>T</sup>F<sub>𝒞</sub></div>
+        </div>
+      </div>
+    </article>
+
+    <div class="arrow" aria-hidden="true"></div>
+
+    <article class="box rose">
+      <span class="step">5</span>
+      <h2>边值问题与梯度更新</h2>
+      <div class="bvp-lines eq">
+        <div>p(1)=∇<sub>x₁</sub>[Ê<sub>hull</sub>+λΦ]</div>
+        <div>−dp/dt=(∂v<sub>θ</sub>/∂x)<sup>T</sup>p</div>
+        <div>∇<sub>z₀</sub>J=p(0)+β(z<sub>0</sub>−z̄<sub>0</sub>)</div>
+      </div>
+      <div class="divider"></div>
+      <div class="eq display">z<sub>0</sub><sup>(k+1)</sup> = z<sub>0</sub><sup>(k)</sup> − η∇<sub>z₀</sub>J</div>
+    </article>
+
+    <div class="loop" aria-hidden="true"><span class="loop-label">更新 initial noise → 重新完整生成 → 直至收敛</span></div>
+  </section>
+
+  <footer>
+    <div class="objective eq">
+      min<sub>z₀</sub> &nbsp; J(z<sub>0</sub>) = Ê<sub>hull</sub>(𝒞(z<sub>0</sub>)) + λΦ(u(𝒞),𝒞) + β/2 ‖z<sub>0</sub>−z̄<sub>0</sub>‖²
+    </div>
+    <div class="note">生成模型参数 θ 与 surrogate 参数 ψ 全程冻结；梯度从终点性质，经数值方程隐式梯度与 Flow 伴随方程，传回 initial noise。</div>
+  </footer>
+</main>
+</body>
+</html>

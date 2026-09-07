@@ -1,5 +1,4 @@
 """Differentiable UMA adapter and finite-difference acceptance gate."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +11,10 @@ from ._io import sha256_file as checkpoint_sha256
 
 EnergyFunction = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 EnergyFactory = Callable[[torch.Tensor], EnergyFunction]
+SecondOrderEvaluator = Callable[
+    [torch.Tensor, torch.Tensor, torch.Tensor],
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+]
 
 
 class _AttachEnergyVJP(torch.autograd.Function):
@@ -224,4 +227,115 @@ def load_uma_calculator_vjp_factory(
         "task_name": task_name,
         "gradient_path": "FAIRChemCalculator force/stress VJP",
         "supports_higher_derivatives": False,
+    }
+
+
+def load_uma_native_second_order_evaluator(
+    checkpoint: str, device: str = "cuda", task_name: str = "omat",
+) -> tuple[SecondOrderEvaluator, dict]:
+    """Load UMA with force/stress outputs retaining their higher-order graph.
+
+    UMA's standard inference head computes forces with ``create_graph=False``.
+    Setting only the output heads to training mode keeps the backbone in
+    deterministic evaluation mode while enabling the head's documented
+    higher-order derivative path.  This computes Hessian-vector products on
+    demand; it deliberately does not materialize the full Hessian.
+    """
+    path = Path(checkpoint)
+    if not path.is_file():
+        raise FileNotFoundError(f"UMA checkpoint not found: {path}")
+    try:
+        from fairchem.core.datasets.atomic_data import AtomicData
+        from fairchem.core.units.mlip_unit import load_predict_unit
+    except ImportError as error:
+        raise RuntimeError("fairchem-core native prediction is required") from error
+    # The default fast path uses torch.compile/AOTAutograd, which does not
+    # support the double backward needed for force/stress constraint
+    # Jacobians.  The batch path is deliberately non-compiled and supports
+    # changing structures between optimizer evaluations.
+    predictor = load_predict_unit(
+        str(path), inference_settings="batch", device=device
+    )
+    initialized = False
+
+    def atomic_data(
+        numbers: torch.Tensor, positions: torch.Tensor, cell: torch.Tensor,
+        target_device: torch.device | str,
+    ):
+        numbers = numbers.to(target_device)
+        positions = positions.to(target_device)
+        cell = cell.to(target_device)
+        atom_count = numbers.numel()
+        return AtomicData(
+            pos=positions, atomic_numbers=numbers, cell=cell,
+            pbc=torch.ones(1, 3, dtype=torch.bool, device=target_device),
+            natoms=torch.tensor(
+                [atom_count], dtype=torch.long, device=target_device
+            ),
+            edge_index=torch.empty(
+                2, 0, dtype=torch.long, device=target_device
+            ),
+            cell_offsets=torch.empty(
+                0, 3, dtype=positions.dtype, device=target_device
+            ),
+            nedges=torch.zeros(1, dtype=torch.long, device=target_device),
+            charge=torch.zeros(1, dtype=torch.long, device=target_device),
+            spin=torch.zeros(1, dtype=torch.long, device=target_device),
+            fixed=torch.zeros(
+                atom_count, dtype=torch.long, device=target_device
+            ),
+            tags=torch.zeros(
+                atom_count, dtype=torch.long, device=target_device
+            ),
+            batch=torch.zeros(
+                atom_count, dtype=torch.long, device=target_device
+            ),
+            dataset=task_name,
+        )
+
+    def evaluate(
+        atomic_numbers: torch.Tensor, frac: torch.Tensor, lattice: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        nonlocal initialized
+        if frac.shape[0] != 1 or lattice.shape != (1, 3, 3):
+            raise ValueError("second-order UMA evaluator accepts one structure")
+        numbers = atomic_numbers.detach().long().flatten().to(device)
+        cell = lattice.to(device)
+        positions = torch.einsum(
+            "bnd,bdk->bnk", frac.to(device), cell
+        ).squeeze(0)
+        atom_count = numbers.numel()
+        if not initialized:
+            # fairchem prepares its as-loaded CPU model before moving it to the
+            # requested accelerator.  Initialize with detached CPU data, then
+            # enable create_graph on the prepared output heads.
+            predictor.predict(atomic_data(
+                numbers.detach().cpu(), positions.detach().cpu(),
+                cell.detach().cpu(), "cpu",
+            ))
+            initialized = True
+        # The UMA EFS head uses ``self.training`` only to select create_graph
+        # for force/stress autograd.  Keep the prepared backbone in eval mode.
+        for head in predictor.model.module.output_heads.values():
+            head.train(True)
+        data = atomic_data(numbers, positions, cell, device)
+        prediction = predictor.predict(data)
+        energy = prediction.get("energy")
+        forces = prediction.get("forces")
+        stress = prediction.get("stress")
+        if energy is None or forces is None or stress is None:
+            raise RuntimeError("UMA prediction lacks energy, forces, or stress")
+        if not forces.requires_grad or not stress.requires_grad:
+            raise RuntimeError("UMA higher-order force/stress graph is detached")
+        return energy.reshape(-1) / atom_count, forces, stress.reshape(-1, 3, 3)
+
+    return evaluate, {
+        "checkpoint": str(path.resolve()),
+        "checkpoint_sha256": checkpoint_sha256(str(path)),
+        "device": device,
+        "task_name": task_name,
+        "inference_settings": "batch (non-compiled)",
+        "gradient_path": "prepared native UMA EFS head with create_graph",
+        "supports_higher_derivatives": True,
+        "full_hessian_materialized": False,
     }

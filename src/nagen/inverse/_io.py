@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,11 @@ def atomic_json(
     """Write indented JSON through a sibling temporary file."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(target.suffix + ".tmp")
+    # Use a process-unique sibling so concurrent sharded campaigns cannot
+    # overwrite one another's temporary file before ``replace``.
+    temporary = target.with_name(
+        f".{target.name}.{os.getpid()}.{os.getppid()}.tmp"
+    )
     temporary.write_text(
         json.dumps(
             payload, indent=2, sort_keys=sort_keys, ensure_ascii=False

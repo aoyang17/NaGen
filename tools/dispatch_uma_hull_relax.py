@@ -88,6 +88,7 @@ def main() -> None:
     parser.add_argument("--task-name", default="omat")
     parser.add_argument("--poll-seconds", type=float, default=30.0)
     parser.add_argument("--free-confirmations", type=int, default=2)
+    parser.add_argument("--max-shard-attempts", type=int, default=3)
     parser.add_argument("--fire-fmax", type=float, default=0.05)
     parser.add_argument("--fire-steps", type=int, default=1500)
     parser.add_argument("--bfgs-fmax", type=float, default=0.01)
@@ -95,9 +96,11 @@ def main() -> None:
     args = parser.parse_args()
     if (
         args.shard_count <= 0 or args.poll_seconds <= 0
-        or args.free_confirmations <= 0
+        or args.free_confirmations <= 0 or args.max_shard_attempts <= 0
     ):
-        raise ValueError("shard count, poll interval, and confirmations must be positive")
+        raise ValueError(
+            "shard count, poll interval, confirmations, and attempts must be positive"
+        )
 
     root = Path(args.out_directory)
     scheduler = root / "scheduler"
@@ -108,6 +111,7 @@ def main() -> None:
     ]
     running: dict[int, dict[str, Any]] = {}
     results: dict[int, dict[str, Any]] = {}
+    attempts: dict[int, int] = {}
     handles: dict[int, Any] = {}
     free_streak: dict[int, int] = {}
 
@@ -125,6 +129,7 @@ def main() -> None:
                 for shard, info in running.items()
             },
             "results": {str(key): value for key, value in results.items()},
+            "attempts": {str(key): value for key, value in attempts.items()},
             "inventory_error": inventory_error,
             "free_streak": {str(key): value for key, value in free_streak.items()},
         })
@@ -141,6 +146,8 @@ def main() -> None:
                 "complete": complete, "log": str(info["log"]),
             }
             running.pop(shard)
+            if not complete and attempts.get(shard, 0) < args.max_shard_attempts:
+                pending.append(shard)
 
         inventory_error = None
         try:
@@ -170,6 +177,7 @@ def main() -> None:
                 stdout=handle, stderr=subprocess.STDOUT, text=True,
             )
             handles[shard] = handle
+            attempts[shard] = attempts.get(shard, 0) + 1
             running[shard] = {
                 "gpu": gpu, "process": process, "log": log,
             }

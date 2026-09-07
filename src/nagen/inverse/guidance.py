@@ -54,11 +54,15 @@ def soft_constraint_terms(
     mask: torch.Tensor,
     temperature: float = 0.35,
     bond_temperature_A: float = 0.10,
+    probabilities_override: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
     """Smooth penalties corresponding to the exact post-generation checks."""
     dtype = terminal.atom.dtype
-    probabilities = torch.softmax(terminal.atom / temperature, dim=-1)
-    probabilities = probabilities * mask.unsqueeze(-1)
+    if probabilities_override is None:
+        probabilities = torch.softmax(terminal.atom / temperature, dim=-1)
+        probabilities = probabilities * mask.unsqueeze(-1)
+    else:
+        probabilities = probabilities_override * mask.unsqueeze(-1)
     n_atoms = mask.sum(dim=1).to(dtype)
     physical_lattice = unstandardize_lattice(
         terminal.lattice, model.lattice_mean, model.lattice_std

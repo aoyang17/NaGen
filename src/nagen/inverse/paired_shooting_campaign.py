@@ -89,12 +89,16 @@ def _configuration(args: argparse.Namespace) -> dict[str, Any]:
         "restoration_steps": args.restoration_steps,
         "guidance_steps": args.guidance_steps,
         "learning_rate": args.learning_rate,
+        "gradient_clip": args.gradient_clip,
         "source_prior": args.source_prior,
         "augmented_rho": args.augmented_rho,
         "distance_margin_A": args.distance_margin_A,
         "distance_weight": args.distance_weight,
         "p_coordination_weight": args.p_coordination_weight,
         "fe_coordination_weight": args.fe_coordination_weight,
+        "hull_threshold_eV_atom": args.hull_threshold,
+        "hull_penalty_weight": args.hull_penalty_weight,
+        "m0_only": bool(args.m0_only),
         "fe_coordination_prior": list(args.fe_coordination_prior),
         "ode_steps": args.ode_steps,
         "integrator": "midpoint",
@@ -104,10 +108,22 @@ def _configuration(args: argparse.Namespace) -> dict[str, Any]:
 def run(args: argparse.Namespace) -> None:
     if args.count <= 0 or args.start_index < 0:
         raise ValueError("campaign slice must be nonempty and nonnegative")
+    if not (0 <= args.shard_index < args.shard_count):
+        raise ValueError("shard index must be in [0, shard_count)")
+    if args.shard_count > args.count:
+        raise ValueError("shard count cannot exceed campaign sample count")
     if (args.hull_scale is None) != (args.novelty_scale is None):
         raise ValueError("objective scales must be both supplied or both estimated")
     if args.main_run and args.hull_scale is None:
         raise ValueError("main run requires objective scales frozen by the pilot")
+    if args.shard_count > 1 and args.hull_scale is None:
+        raise ValueError(
+            "sharded campaigns require objective scales calibrated on the full pilot"
+        )
+    if args.scale_only_out and args.shard_count != 1:
+        raise ValueError("objective-scale calibration must use the complete unsharded slice")
+    if args.scale_only_out and args.hull_scale is not None:
+        raise ValueError("objective-scale calibration cannot receive frozen scales")
     device = torch.device(args.device)
     geometry_path = Path(args.geometry_checkpoint)
     novelty_path = Path(args.novelty_index)
@@ -135,6 +151,7 @@ def run(args: argparse.Namespace) -> None:
         "role": "main_256" if args.main_run else "pilot",
         "start_index": args.start_index,
         "count": args.count,
+        "execution_shard_count": args.shard_count,
         "seed": args.seed,
         "configuration": configuration,
         "geometry_checkpoint": str(geometry_path.resolve()),
@@ -158,11 +175,25 @@ def run(args: argparse.Namespace) -> None:
         for key, value in identity.items():
             if previous.get(key) != value:
                 raise RuntimeError(f"campaign resume identity mismatch: {key}")
-    elif root.exists() and any(root.iterdir()):
-        raise RuntimeError("nonempty campaign directory has no matching manifest")
+    elif root.exists():
+        # A launcher may create a logs directory before concurrent shard
+        # processes race to write the shared manifest.  Other pre-existing
+        # content is still rejected to protect resumability and provenance.
+        unexpected = [
+            path for path in root.iterdir() if path.name not in {"logs"}
+        ]
+        if unexpected:
+            raise RuntimeError("nonempty campaign directory has no matching manifest")
 
     prepared: list[dict[str, Any]] = []
-    for sample_id in range(args.start_index, args.start_index + args.count):
+    sample_ids = [
+        sample_id
+        for offset, sample_id in enumerate(
+            range(args.start_index, args.start_index + args.count)
+        )
+        if offset % args.shard_count == args.shard_index
+    ]
+    for sample_id in sample_ids:
         composition_index = campaign_composition_index(sample_id, len(compositions))
         composition = compositions[composition_index]
         sample_seed = args.seed + sample_id
@@ -213,6 +244,30 @@ def run(args: argparse.Namespace) -> None:
     campaign_identity_sha256 = sha256_json(
         identity | {"objective_scales": list(scales)}
     )
+    if args.scale_only_out:
+        atomic_json(Path(args.scale_only_out), {
+            "version": "paired-shooting-objective-scales-v1",
+            "campaign_identity_sha256": campaign_identity_sha256,
+            "baseline_records": len(prepared),
+            "objective_scales": list(scales),
+            "baseline_values": [
+                {
+                    "sample_id": item["sample_id"],
+                    "sample_seed": item["sample_seed"],
+                    "composition_index": item["composition_index"],
+                    "counts": item["composition"]["counts"],
+                    "values": item["baseline_values"],
+                }
+                for item in prepared
+            ],
+            "identity": identity,
+        })
+        print(json.dumps({
+            "scale_only_out": str(Path(args.scale_only_out)),
+            "baseline_records": len(prepared),
+            "objective_scales": list(scales),
+        }, indent=2))
+        return
     if manifest_path.exists():
         previous = json.loads(manifest_path.read_text())
         if previous.get("campaign_identity_sha256") != campaign_identity_sha256:
@@ -261,11 +316,15 @@ def run(args: argparse.Namespace) -> None:
             "status": "running",
         }
         atomic_json(target, record)
-        variants = {
-            "B1": {"use_hull": False, "use_novelty": False},
-            "B2": {"use_hull": False, "use_novelty": True},
-            "M0": {"use_hull": True, "use_novelty": True},
-        }
+        variants = (
+            {"M0": {"use_hull": True, "use_novelty": True}}
+            if args.m0_only else
+            {
+                "B1": {"use_hull": False, "use_novelty": False},
+                "B2": {"use_hull": False, "use_novelty": True},
+                "M0": {"use_hull": True, "use_novelty": True},
+            }
+        )
         for name, mode in variants.items():
             try:
                 result = ShootingFlowRunner(model, item["problem"]).run(
@@ -275,6 +334,7 @@ def run(args: argparse.Namespace) -> None:
                         restoration_steps=args.restoration_steps,
                         guidance_steps=args.guidance_steps,
                         learning_rate=args.learning_rate,
+                        gradient_clip=args.gradient_clip,
                         source_prior=args.source_prior,
                         augmented_rho=args.augmented_rho,
                         ode_steps=args.ode_steps,
@@ -285,6 +345,8 @@ def run(args: argparse.Namespace) -> None:
                         distance_weight=args.distance_weight,
                         p_coordination_weight=args.p_coordination_weight,
                         fe_coordination_weight=args.fe_coordination_weight,
+                        hull_threshold_eV_atom=args.hull_threshold,
+                        hull_penalty_weight=args.hull_penalty_weight,
                     ),
                 )
                 values = _values(item["problem"], result.terminal)
@@ -325,6 +387,8 @@ def run(args: argparse.Namespace) -> None:
     print(json.dumps({
         "output": str(root), "status": manifest["status"],
         "completed_records": manifest["completed_records"],
+        "shard_index": args.shard_index,
+        "shard_records": len(sample_ids),
         "objective_scales": manifest["objective_scales"],
     }, indent=2))
 
@@ -339,11 +403,17 @@ def main() -> None:
     parser.add_argument("--out-directory", required=True)
     parser.add_argument("--start-index", type=int, required=True)
     parser.add_argument("--count", type=int, required=True)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--seed", type=int, default=20260826)
     parser.add_argument("--ode-steps", type=int, default=24)
-    parser.add_argument("--restoration-steps", type=int, default=200)
+    parser.add_argument(
+        "--restoration-steps", type=int, default=0,
+        help="legacy objective-free phase; default 0 for full joint M0 guidance",
+    )
     parser.add_argument("--guidance-steps", type=int, default=40)
     parser.add_argument("--learning-rate", type=float, default=0.005)
+    parser.add_argument("--gradient-clip", type=float, default=10.0)
     parser.add_argument("--source-prior", type=float, default=0.02)
     parser.add_argument("--augmented-rho", type=float, default=1.0)
     parser.add_argument("--distance-margin-A", type=float, default=0.10)
@@ -351,14 +421,27 @@ def main() -> None:
     parser.add_argument("--p-coordination-weight", type=float, default=12.0)
     parser.add_argument("--fe-coordination-weight", type=float, default=2.0)
     parser.add_argument(
+        "--hull-threshold", type=float, default=0.150,
+        help="strict E_hull target enforced by the guidance hinge",
+    )
+    parser.add_argument(
+        "--hull-penalty-weight", type=float, default=100.0,
+        help="augmented-Lagrangian weight for E_hull threshold violation",
+    )
+    parser.add_argument(
         "--fe-coordination-prior", type=float, nargs=3,
         default=(0.084, 0.1025, 0.8135),
     )
     parser.add_argument("--hull-scale", type=float)
     parser.add_argument("--novelty-scale", type=float)
+    parser.add_argument("--scale-only-out")
     parser.add_argument("--task-name", default="omat")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--main-run", action="store_true")
+    parser.add_argument(
+        "--m0-only", action="store_true",
+        help="run only the full joint M0 optimization branch",
+    )
     parser.add_argument("--resume", action="store_true")
     run(parser.parse_args())
 

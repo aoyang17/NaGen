@@ -4,13 +4,18 @@
 
 ## 当前结论
 
+当前默认实验主线已收敛为“冻结 Flow + 新训练的周期 E_hull surrogate + ShootingFlow
+source-space 优化”。主线资产、优化变量和旧实验边界见
+[docs/CODE_LAYOUT.md](docs/CODE_LAYOUT.md) 及
+[configs/surrogate_shootingflow_v1.json](configs/surrogate_shootingflow_v1.json)。
+
 NaGen 不应被定义成单一“生成模型”，而应是一个可追溯的闭环材料发现系统：
 
 `只读原始数据 → 数据审计/标准化 → 表示与标签 → 生成 → 快速物理筛选 → MLFF 松弛 → DFT/Dflow 验证 → 主动学习回流`
 
 首选技术路线是 **MatterGen 迁移学习基线 + 磷酸盐领域适配 + Dflow 多保真优化闭环**。现有数据量（17,774 条）适合领域微调和条件适配器，不适合直接替代大规模通用预训练、从零训练一个通用 MatterGen。自研模型应作为并行研究线，在统一数据与评测协议成熟后再推进。
 
-完整分析见 [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md)，多目标问题定义见
+完整历史分析见 [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md)，多目标问题定义见
 [docs/OPTIMIZATION.md](docs/OPTIMIZATION.md)。
 
 ## Phase 0 状态（2026-08-18 完成）

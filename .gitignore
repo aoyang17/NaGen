@@ -29,6 +29,17 @@ dist/
 /experiments/exp_*
 /runs
 
+# Generated experiment reports and rendered structures are kept outside the
+# source repository; durable copies live under /mnt/data2/aobo/NaGen.
+/outputs/
+/shooting_structures_orderedcoord/
+/shooting_structures_cif_only/
+/experiments/diagnostics/
+/.tools/
+/.agents/
+/.codex/
+/.claude/
+
 # Models and numerical jobs are reproducible artifacts, not source code.
 *.ckpt
 *.pt

@@ -9,6 +9,7 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from pymatgen.core import Lattice, Structure
 
 from nagen.inverse.relax_uma import RelaxationConfig, relax_structure, unique_structure_indices
+from nagen.inverse.joint_dflow_relax_campaign import final_acceptance
 
 
 class FakeOptimizer:
@@ -70,6 +71,27 @@ class RelaxationTests(unittest.TestCase):
         novel = Structure(lattice, ["Fe"], [[0, 0, 0]])
         indices = unique_structure_indices([duplicate, novel, novel.copy()], [reference])
         self.assertEqual(indices, [1])
+
+    def test_final_acceptance_requires_all_four_gates(self) -> None:
+        feasible = {
+            "feasible": True,
+            "checks": {"hull_threshold": True},
+        }
+        accepted = final_acceptance(True, -6.0, -6.1, feasible, 1.0e-6)
+        self.assertTrue(accepted["accepted"])
+        self.assertEqual(accepted["status"], "accepted")
+
+        increased = final_acceptance(True, -6.0, -5.9, feasible, 1.0e-6)
+        self.assertFalse(increased["accepted"])
+        self.assertEqual(increased["status"], "energy_increased")
+
+        hull_failed = {
+            "feasible": False,
+            "checks": {"hull_threshold": False},
+        }
+        rejected = final_acceptance(True, -6.0, -6.1, hull_failed, 1.0e-6)
+        self.assertFalse(rejected["accepted"])
+        self.assertEqual(rejected["status"], "constraints_violated")
 
 
 if __name__ == "__main__":

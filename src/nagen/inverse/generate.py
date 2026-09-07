@@ -90,6 +90,7 @@ def sample_feasible_compositions(
     pool_factor: int = 6,
     max_rounds: int = 20,
     max_atoms: int | None = None,
+    proposal_batch_limit: int = 512,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Rejection-control p(A,N) using only exact composition constraints."""
     device = next(model.parameters()).device
@@ -101,7 +102,9 @@ def sample_feasible_compositions(
         remaining = count - len(accepted)
         if remaining <= 0:
             break
-        proposal_count = min(512, max(32, remaining * pool_factor))
+        proposal_count = min(
+            proposal_batch_limit, max(32, remaining * pool_factor)
+        )
         n_atoms = sample_atom_counts(
             checkpoint["n_histogram"], proposal_count, generator
         ).to(device)
@@ -137,6 +140,33 @@ def sample_feasible_compositions(
     return generated_types, mask
 
 
+def sample_unconditional_compositions(
+    model: CrystalVectorField,
+    checkpoint: dict[str, Any],
+    count: int,
+    generator: torch.Generator,
+    ode_steps: int,
+    integrator: str,
+    max_atoms: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sample ``(N, A)`` from the learned flow without constraint rejection."""
+    device = next(model.parameters()).device
+    histogram = checkpoint["n_histogram"].clone()
+    if max_atoms is not None and max_atoms + 1 < histogram.numel():
+        histogram[max_atoms + 1 :] = 0
+    n_atoms = sample_atom_counts(histogram, count, generator).to(device)
+    source, mask = variable_random_source(
+        n_atoms, model.config.vocab_size, device, generator
+    )
+    with torch.no_grad():
+        terminal = integrate_flow(
+            model, source, mask, steps=ode_steps, method=integrator
+        )
+        generated_types = terminal.atom.argmax(dim=-1) + 1
+        generated_types = generated_types.masked_fill(~mask, 0)
+    return generated_types, mask
+
+
 def generate_batch(
     model: CrystalVectorField,
     checkpoint: dict[str, Any],
@@ -151,6 +181,7 @@ def generate_batch(
     terminal_lr: float = 0.025,
     composition_filter: bool = False,
     composition_pool_factor: int = 6,
+    composition_max_rounds: int = 20,
     max_atoms: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     device = next(model.parameters()).device
@@ -164,6 +195,7 @@ def generate_batch(
             ode_steps,
             integrator,
             composition_pool_factor,
+            composition_max_rounds,
             max_atoms=max_atoms,
         )
         n_atoms = mask.sum(dim=1)
@@ -338,7 +370,7 @@ def export_samples(
         terminal_lr,
         composition_filter,
         composition_pool_factor,
-        max_atoms,
+        max_atoms=max_atoms,
     )
     descriptor = crystal_descriptor(types, frac, lattice, mask, novelty.config)
     novelty_score, nearest_index = novelty.score(descriptor)

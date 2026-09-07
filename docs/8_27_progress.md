@@ -52,7 +52,9 @@ E_hull <= 0.150 eV/atom
 | Fe coordination prior | 0.084 / 0.1025 / 0.8135 |
 | ODE steps | 24 |
 
-相同 32 个源噪声下，严格几何通过率由 `17/32` 提高到 `22/32`，新增 5 个通过样本且原通过样本没有回退。因此后续 pilot 应使用修复后的 geometry checkpoint 和上述冻结距离配置。
+相同 32 个源噪声下，严格几何通过率由 `17/32` 提高到 `22/32`，新增 5 个通过样本且原通过样本没有回退。该改善来自原正式 `flow_geometry.best.pt` 上的推理期 restoration 和距离余量调整，不是重新训练 checkpoint 的收益。后续 pilot 必须继续使用该正式 checkpoint 和上述冻结距离配置。
+
+`exp_2026-08-27/checkpoints/flow_geometry_repair.best.pt` 的无条件复核为严格几何 `0/32`，未被采用；不得因为时间更新而把它误认为后续正式 checkpoint。
 
 ### 2.3 `E_hull` 口径修正
 
@@ -140,7 +142,7 @@ mp_cache/mp_competing_structures.json
 3. 若竞争相弛豫未完成，使用相同模型、任务头、阈值和 32 分片设置执行 `--resume`。不得改变半途协议。
 4. 只有 560 个条目全部存在且最终 BFGS 收敛后，才运行 `uma_hull_campaign build` 构建正式 `uma_hull_cache.json`。
 5. 用 `UMAHullCache` 重新校验：状态 complete、支持数 560/560、UMA 哈希匹配、任务头为 `omat`、每个组成有参考能。
-6. 使用修复后的 geometry checkpoint 和冻结距离参数运行 32 样本配对 pilot：B0 无引导、B1 约束、B2 约束+新颖性、M0 完整 MGDA。
+6. 使用已验证的 `exp_2026-08-26/checkpoints/flow_geometry.best.pt` 和冻结距离参数运行 32 样本配对 pilot：B0 无引导、B1 约束、B2 约束+新颖性、M0 完整 MGDA。
 7. 汇总配对差值、严格几何通过率、`E_hull`、新颖性、源噪声漂移、梯度范数/夹角和 MGDA 权重。只有 G5 通过后才冻结目标尺度和配置。
 8. G5 通过后启动同一 `N,A,z_0` 配对的 256 样本主实验；不得通过挑 seed 只报告最佳样本。
 9. 对 M0 结构先做精确预筛，再执行 UMA + FIRE/BFGS 完整弛豫。
@@ -168,7 +170,7 @@ mp_cache/mp_competing_structures.json
 
 - `models/uma/uma-m-1p1.pt`；
 - `experiments/exp_2026-08-26` 中的数据、组成池、MP phase cache、新颖性索引和既有训练 checkpoint；
-- `experiments/exp_2026-08-27/checkpoints/flow_geometry_repair.best.pt`；
+- `experiments/exp_2026-08-26/checkpoints/flow_geometry.best.pt`；
 - `experiments/exp_2026-08-26_02` 整个正式实验目录，包括 MP 结构缓存和所有已完成弛豫记录；
 - 旧实验报告，作为历史结论和参数来源。
 
@@ -211,7 +213,7 @@ MP API key 不属于迁移产物：
 | 产物 | SHA-256 |
 |---|---|
 | UMA `uma-m-1p1.pt` | `c30034edbf2e127f703f814cacb632661767da99b3e71c5b2ee5290510a52d68` |
-| 修复后 Flow checkpoint | `c1f3aa1a5167337586566fc14ee5172d69c43a817b2314f866dbf59f9b11ee88` |
+| 正式 Flow geometry checkpoint | `28965e09029879a43361e21a20107b32f20fcc26fa1538abfe563473f36dfccd` |
 | 560 结构 MP 缓存 | `218067d9af2fe338cd5582ebb88e42f0be0017b75b79f197acb45a216ee1a814` |
 | MP phase entries | `f67509ac0a823f0e65ac6d879e25bccb2329963d9b791115e9b86c763fd81b69` |
 | 组成池 | `08162062a653e083a0ee5559c6e8eb929d102746f311125bfe22b807f851a76f` |

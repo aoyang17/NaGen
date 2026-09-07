@@ -18,6 +18,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import time
 import traceback
 from collections import Counter
 from datetime import datetime, timezone
@@ -38,6 +40,8 @@ STRUCTURE_CACHE_VERSION = "uma-hull-mp-structures-v1"
 RELAX_RECORD_VERSION = "uma-hull-relax-record-v1"
 HULL_CACHE_VERSION = "uma-hull-cache-v1"
 SUPPORT_POLICY = "all_mp2020_compatible_entries"
+MP2020_HUBBARDS = {"Fe": 5.3}
+MP2020_POTCAR = {"Na": "Na_pv", "Fe": "Fe_pv", "P": "P", "O": "O"}
 
 
 def utc_now() -> str:
@@ -257,6 +261,32 @@ def _structure_payload(atoms: Any) -> dict[str, Any]:
     }
 
 
+def sync_relaxation_logs(
+    scratch_directory: Path, durable_directory: Path, retries: int = 3,
+) -> None:
+    """Copy a completed local trajectory tree to durable storage atomically."""
+    if retries <= 0:
+        raise ValueError("log sync retries must be positive")
+    durable_directory.parent.mkdir(parents=True, exist_ok=True)
+    temporary = durable_directory.with_name(durable_directory.name + ".copying")
+    last_error: OSError | None = None
+    for retry in range(retries):
+        try:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+            shutil.copytree(scratch_directory, temporary)
+            temporary.replace(durable_directory)
+            return
+        except OSError as error:
+            last_error = error
+            if temporary.exists():
+                shutil.rmtree(temporary, ignore_errors=True)
+            if retry + 1 < retries:
+                time.sleep(1.0 * (retry + 1))
+    assert last_error is not None
+    raise last_error
+
+
 def relax_command(args: argparse.Namespace) -> None:
     phase_path = Path(args.phase_cache)
     _, entries = load_phase_support(phase_path)
@@ -293,11 +323,15 @@ def relax_command(args: argparse.Namespace) -> None:
     root = Path(args.out_directory)
     record_directory = root / "records"
     log_directory = root / "logs"
+    scratch_root_value = getattr(args, "scratch_directory", None)
+    scratch_root = Path(scratch_root_value) if scratch_root_value else None
     calculator = _load_calculator(args.uma_checkpoint, args.device, args.task_name)
     counts = {"selected": len(selected), "converged": 0, "failed": 0, "skipped": 0}
     for entry in selected:
         entry_id = str(entry["entry_id"])
         target = record_directory / f"{_safe_id(entry_id)}.json"
+        attempt = 1
+        previous: dict[str, Any] | None = None
         if target.exists() and not args.resume:
             raise FileExistsError(
                 f"relaxation record already exists for {entry_id}; use --resume"
@@ -319,8 +353,30 @@ def relax_command(args: argparse.Namespace) -> None:
                 counts["converged"] += 1
                 counts["skipped"] += 1
                 continue
+            attempt = int(previous.get("attempt", 1)) + 1
         source = structure_cache["structures"][entry_id]
-        atoms = ase_atoms_from_structure_dict(source["structure"])
+        continuation = bool(
+            previous is not None
+            and previous.get("status") == "bfgs_not_converged"
+            and previous.get("relaxed_structure") is not None
+        )
+        continuation_structure: dict[str, Any] | None = None
+        if continuation:
+            from ase import Atoms
+            continued = previous["relaxed_structure"]
+            continuation_structure = continued
+            atoms = Atoms(
+                symbols=continued["elements"],
+                scaled_positions=np.asarray(
+                    continued["frac_coords"], dtype=float
+                ),
+                cell=np.asarray(continued["lattice"], dtype=float),
+                pbc=continued.get("pbc", True),
+            )
+            input_structure_sha256 = sha256_json(continued)
+        else:
+            atoms = ase_atoms_from_structure_dict(source["structure"])
+            input_structure_sha256 = sha256_json(source["structure"])
         from pymatgen.core import Composition
         expected_formula = Composition(entry["composition"]).reduced_formula
         structure_formula = Composition(
@@ -341,12 +397,18 @@ def relax_command(args: argparse.Namespace) -> None:
             "phase_cache_sha256": phase_hash,
             "structure_cache_sha256": structure_hash,
             "source_structure_sha256": sha256_json(source["structure"]),
+            "input_structure_sha256": input_structure_sha256,
+            "continued_from_attempt": (
+                int(previous.get("attempt", 1)) if continuation else None
+            ),
+            "continuation_input_structure": continuation_structure,
             "uma_checkpoint": str(Path(args.uma_checkpoint).resolve()),
             "uma_model_sha256": checkpoint_hash,
             "task_name": args.task_name,
             "protocol": protocol,
             "protocol_sha256": protocol_hash,
             "device": args.device,
+            "attempt": attempt,
             "started_at": utc_now(),
             "status": "running",
             "converged": False,
@@ -355,9 +417,29 @@ def relax_command(args: argparse.Namespace) -> None:
         try:
             atoms.calc = calculator
             initial_energy = float(atoms.get_potential_energy()) / len(atoms)
-            result = relax_structure(
-                atoms, calculator, str(log_directory / _safe_id(entry_id)), config
+            durable_log_directory = (
+                log_directory
+                / _safe_id(entry_id)
+                / f"attempt_{attempt:03d}"
             )
+            working_log_directory = (
+                scratch_root
+                / f"shard_{args.shard_index:03d}_pid_{os.getpid()}"
+                / _safe_id(entry_id)
+                / f"attempt_{attempt:03d}"
+                if scratch_root is not None else durable_log_directory
+            )
+            result = relax_structure(
+                atoms,
+                calculator,
+                str(working_log_directory),
+                config,
+            )
+            if scratch_root is not None:
+                sync_relaxation_logs(
+                    working_log_directory, durable_log_directory
+                )
+                shutil.rmtree(working_log_directory, ignore_errors=True)
             final_energy = float(result.atoms.get_potential_energy()) / len(atoms)
             final_stress = np.asarray(
                 result.atoms.get_stress(voigt=False), dtype=float
@@ -372,6 +454,7 @@ def relax_command(args: argparse.Namespace) -> None:
                 "final_energy_eV_atom": final_energy,
                 "final_stress_eV_A3": final_stress.tolist(),
                 "final_max_abs_stress_eV_A3": float(np.abs(final_stress).max()),
+                "log_directory": str(durable_log_directory),
                 "relaxed_structure": _structure_payload(result.atoms),
                 "finished_at": utc_now(),
             })
@@ -506,7 +589,10 @@ def build_hull_payload(
     payload: dict[str, Any] = {
         "version": HULL_CACHE_VERSION,
         "status": "complete",
-        "definition": "E_hull=E_UMA-E_ref_UMA",
+        # Both terms of E_hull are UMA energies from the same relaxation
+        # protocol, so no compatibility correction applies.
+        "definition": "E_hull=E_UMA_candidate-E_UMA_hull",
+        "official_reference_field": "reference_energy_eV_atom",
         "support_policy": SUPPORT_POLICY,
         "created_at": utc_now(),
         "phase_cache": str(phase_path.resolve()),
@@ -574,6 +660,14 @@ def parser() -> argparse.ArgumentParser:
     relax.add_argument("--fire-steps", type=int, default=1500)
     relax.add_argument("--bfgs-fmax", type=float, default=0.01)
     relax.add_argument("--bfgs-steps", type=int, default=1500)
+    relax.add_argument(
+        "--scratch-directory", default="/tmp/nagen-uma-hull",
+        help=(
+            "Node-local trajectory workspace. Completed logs are atomically "
+            "copied to the durable output directory. Use an empty value to "
+            "write trajectories directly to durable storage."
+        ),
+    )
     relax.add_argument("--resume", action="store_true")
     relax.set_defaults(function=relax_command)
 

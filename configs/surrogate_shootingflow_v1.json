@@ -1,0 +1,25 @@
+{
+  "version": "nagen-surrogate-shootingflow-v1",
+  "description": "Frozen Flow + frozen periodic E_hull surrogate + source-space ShootingFlow optimization.",
+  "flow_checkpoint": "/mnt/data2/aobo/NaGen/inverse_v1/checkpoints/naxl_unconditional_surrogate_ready_v2.best.pt",
+  "surrogate_checkpoint": "/mnt/data2/aobo/NaGen/surrogate_ehull/runs/final_mace_v1/best_model.pt",
+  "packed_data": "/mnt/data2/aobo/NaGen/inverse_v1/data/naxl_packed_v1.pt",
+  "optimized_variables": ["z_X", "z_L"],
+  "fixed_variables": ["N", "A"],
+  "threshold_eV_atom": 0.15,
+  "defaults": {
+    "count": 12,
+    "steps": 140,
+    "geometry_steps": 100,
+    "ode_steps": 24,
+    "novelty_weight": 0.005,
+    "constraint_weight": 20.0,
+    "tau_distance": 0.08,
+    "tau_coord": 0.08
+  },
+  "status": {
+    "uma_relaxation": false,
+    "true_e_hull_evaluation": false,
+    "surrogate_is_screening_only": true
+  }
+}
