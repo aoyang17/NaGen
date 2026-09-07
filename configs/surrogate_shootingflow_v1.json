@@ -12,14 +12,18 @@
     "steps": 140,
     "geometry_steps": 100,
     "ode_steps": 24,
-    "novelty_weight": 0.005,
+    "property_energy_weight": 0.8,
+    "property_novelty_weight": 0.2,
+    "novelty_target": 1.0,
+    "energy_scale": 0.15,
+    "novelty_scale": 1.0,
     "constraint_weight": 20.0,
     "tau_distance": 0.08,
-    "tau_coord": 0.08
+    "tau_coord": 0.08,
+    "graph_refresh_steps": 10
   },
   "status": {
-    "uma_relaxation": false,
-    "true_e_hull_evaluation": false,
-    "surrogate_is_screening_only": true
+    "uma_force_stress_barrier": "optional via --uma-checkpoint",
+    "true_e_hull_evaluation": false
   }
 }

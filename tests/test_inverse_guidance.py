@@ -26,6 +26,7 @@ class TerminalGuidanceTests(unittest.TestCase):
         self.assertEqual(set(terms), {
             "distance", "p_coordination", "fe_coordination",
             "p_geometry", "fe_geometry", "minimum_distance_A",
+            "poly_center", "poly_face", "poly_coplanar",
         })
         self.assertTrue(torch.isfinite(frac.grad).all())
         self.assertTrue(torch.isfinite(lattice.grad).all())

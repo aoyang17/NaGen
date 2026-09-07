@@ -44,7 +44,7 @@ def constraint_penalty(elements, frac, lattice, tau_distance=0.08, tau_coord=0.0
 
     This is deliberately kept local to the surrogate shooting experiment: the
     exact acceptance gate remains ``evaluate_feasibility`` and therefore still
-    comes from ``docs/OPTIMIZATION.md``/``inverse.constraints``.
+    comes from ``docs/HybridOptimization.md``/``inverse.constraints``.
     """
     n = frac.shape[0]
     shifts = torch.tensor([(i,j,k) for i in (-1.,0.,1.) for j in (-1.,0.,1.) for k in (-1.,0.,1.)], device=frac.device, dtype=frac.dtype)

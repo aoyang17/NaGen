@@ -22,19 +22,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-relax = ["chgnet"]
 shooting = [
-  "casadi>=3.7,<3.9",
   "fairchem-core>=2.21,<2.22",
-  "mp-api==0.46.5",
   "numpy>=2.0,<2.5",
   "torch>=2.8,<2.9",
 ]
-
-[project.scripts]
-nagen-cluster-analysis = "nagen.analysis.cluster:main"
-nagen-build-four-element-data = "nagen.inverse.four_element_dataset:main"
-nagen-validate-experiment = "nagen.inverse.validation:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,4 +1,4 @@
-"""Packed family-agnostic dataset for joint (N, A, X, L) generation."""
+"""Packed Na-Fe-P-O dataset for joint (N, A, X, L) generation."""
 
 from __future__ import annotations
 
