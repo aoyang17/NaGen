@@ -17,9 +17,11 @@ from nagen.inverse.lattice import decode_lattice, unstandardize_lattice
 from nagen.inverse.model import CrystalState
 from nagen.inverse.sample import integrate_flow
 from nagen.inverse.constraints import evaluate_feasibility, composition_metrics
+from nagen.inverse.guidance import polyhedron_constraint_terms
 from nagen.inverse.novelty import crystal_descriptor
 from nagen.inverse.dataset import PackedCrystalDataset, collate_crystals
 from nagen.surrogate.ehull_mace import load_surrogate, structure_to_model_batch
+from nagen.inverse.uma_guidance import load_uma_native_second_order_evaluator
 
 
 def reference_descriptors(path: str, count: int, device: torch.device):
@@ -100,8 +102,24 @@ def main() -> None:
     p.add_argument("--max-atoms", type=int, default=64)
     p.add_argument("--novelty-weight", type=float, default=0.02)
     p.add_argument("--constraint-weight", type=float, default=1.0)
+    p.add_argument("--property-energy-weight", type=float, default=0.8)
+    p.add_argument("--property-novelty-weight", type=float, default=0.2)
+    p.add_argument("--novelty-target", type=float, default=1.0)
+    p.add_argument("--energy-scale", type=float, default=0.15)
+    p.add_argument("--novelty-scale", type=float, default=1.0)
+    p.add_argument("--poly-center-weight", type=float, default=8.0)
+    p.add_argument("--poly-face-weight", type=float, default=8.0)
+    p.add_argument("--poly-coplanar-weight", type=float, default=4.0)
     p.add_argument("--tau-distance", type=float, default=0.08)
     p.add_argument("--tau-coord", type=float, default=0.08)
+    p.add_argument("--graph-refresh-steps", type=int, default=10,
+                   help="Rebuild surrogate periodic neighbor graph every K steps.")
+    p.add_argument("--uma-checkpoint", default=None,
+                   help="Optional UMA checkpoint for differentiable force/stress barriers.")
+    p.add_argument("--force-barrier-weight", type=float, default=20.0)
+    p.add_argument("--stress-barrier-weight", type=float, default=20.0)
+    p.add_argument("--force-tolerance", type=float, default=0.01)
+    p.add_argument("--stress-tolerance-gpa", type=float, default=0.10)
     args = p.parse_args()
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
@@ -112,6 +130,11 @@ def main() -> None:
         parameter.requires_grad_(False)
     for parameter in surrogate.parameters():
         parameter.requires_grad_(False)
+    uma_evaluator = None
+    if args.uma_checkpoint:
+        uma_evaluator, _ = load_uma_native_second_order_evaluator(
+            args.uma_checkpoint, device=device, task_name="omat"
+        )
     generator = torch.Generator(device=device).manual_seed(args.seed)
     try:
         types, masks = sample_feasible_compositions(
@@ -179,9 +202,9 @@ def main() -> None:
                 mask.sum(dim=1),
             )
             elements = [inverse[int(x)] for x in type_row[0].tolist()]
-            # Build a fixed neighbor topology once; coordinates and lattice remain
-            # differentiable tensors throughout the shooting optimization.
-            if iteration == 0:
+            # Neighbor selection is discrete. Rebuild it periodically from the
+            # current detached structure, while retaining differentiable frac/L.
+            if iteration == 0 or iteration % max(1, args.graph_refresh_steps) == 0:
                 ref = Structure(Lattice(physical_lattice[0].detach().cpu().numpy()), elements,
                                 terminal.frac[0].detach().cpu().numpy())
                 batch = structure_to_model_batch(
@@ -203,19 +226,50 @@ def main() -> None:
             distances = torch.cdist((descriptor - ref_mean) / ref_std, (ref_desc - ref_mean) / ref_std) / descriptor.shape[-1] ** 0.5
             novelty = distances.min()
             constraints = constraint_penalty(elements, terminal.frac[0], physical_lattice, args.tau_distance, args.tau_coord)
+            poly = polyhedron_constraint_terms(flow, terminal, mask)
+            constraints = constraints + (
+                args.poly_center_weight * poly["poly_center"]
+                + args.poly_face_weight * poly["poly_face"]
+                + args.poly_coplanar_weight * poly["poly_coplanar"]
+            )
+            property_loss = (
+                args.property_energy_weight * (prediction / args.energy_scale).square()
+                + args.property_novelty_weight
+                * ((args.novelty_target - novelty) / args.novelty_scale).square()
+            )
             threshold_loss = 0.02 * torch.nn.functional.softplus(
                 (prediction - args.threshold) / 0.02
-            )
+            ).square()
+            relaxation_loss = terminal.frac.sum() * 0.0
+            fmax = terminal.frac.sum() * 0.0
+            stress_fro = terminal.frac.sum() * 0.0
+            if uma_evaluator is not None:
+                atomic_numbers = torch.tensor(
+                    [{"Na": 11, "Fe": 26, "P": 15, "O": 8}[e] for e in elements],
+                    dtype=torch.long, device=device,
+                )
+                _, forces, stress = uma_evaluator(
+                    atomic_numbers, terminal.frac, physical_lattice
+                )
+                fmax = torch.linalg.vector_norm(forces, dim=-1).amax()
+                stress_fro = torch.linalg.matrix_norm(stress, ord="fro")
+                stress_tol = args.stress_tolerance_gpa / 160.21766208
+                relaxation_loss = (
+                    args.force_barrier_weight
+                    * torch.nn.functional.softplus((fmax - args.force_tolerance) / 0.01).square()
+                    + args.stress_barrier_weight
+                    * torch.nn.functional.softplus((stress_fro - stress_tol) / 0.0001).square()
+                )
             prior = 0.01 * (z_frac.square().mean() + z_lattice.square().mean())
             if iteration < args.geometry_steps:
                 # Stage 1: project the generated endpoint into the analytic
                 # geometry-feasible region before applying property guidance.
-                loss = args.constraint_weight * constraints + prior
+                loss = args.constraint_weight * constraints + relaxation_loss + prior
                 stage = "geometry_projection"
             else:
                 # Stage 2: one scalar objective near the feasible geometry
                 # manifold; novelty is an additive objective, not a Pareto task.
-                loss = threshold_loss - args.novelty_weight * novelty + args.constraint_weight * constraints + prior
+                loss = property_loss + threshold_loss + args.constraint_weight * constraints + relaxation_loss + prior
                 stage = "hull_novelty_guidance"
             loss.backward()
             torch.nn.utils.clip_grad_norm_([z_frac, z_lattice], 5.0)
@@ -271,9 +325,13 @@ def main() -> None:
         "threshold": args.threshold,
         "geometry_steps": args.geometry_steps,
         "novelty_weight": args.novelty_weight,
+        "property_energy_weight": args.property_energy_weight,
+        "property_novelty_weight": args.property_novelty_weight,
         "constraint_weight": args.constraint_weight,
         "tau_distance": args.tau_distance,
         "tau_coord": args.tau_coord,
+        "graph_refresh_steps": args.graph_refresh_steps,
+        "uma_force_stress_barrier": bool(args.uma_checkpoint),
         "passing": sum(r["passes_threshold"] for r in records),
         "records": records,
     }

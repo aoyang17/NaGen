@@ -38,6 +38,18 @@ class HybridLBFGSConfig:
     fe_coordination_weight: float = 12.0
     volume_weight: float = 10.0
     novelty_weight: float = 0.01
+    property_energy_weight: float = 0.8
+    property_novelty_weight: float = 0.2
+    novelty_target: float = 1.0
+    property_energy_scale: float = 0.15
+    property_novelty_scale: float = 1.0
+    poly_center_weight: float = 8.0
+    poly_face_weight: float = 8.0
+    poly_coplanar_weight: float = 4.0
+    force_barrier_weight: float = 20.0
+    stress_barrier_weight: float = 20.0
+    force_tolerance_eV_A: float = 0.01
+    stress_tolerance_eV_A3: float = 0.10 / 160.21766208
     source_prior_weight: float = 0.002
     composition_weight: float = 40.0
     atom_temperature: float = 0.35
@@ -58,10 +70,12 @@ def relaxation_metrics_from_energy_gradient(
     energy_eV_atom: torch.Tensor,
     frac: torch.Tensor,
     lattice: torch.Tensor,
+    create_graph: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Recover max force and Frobenius stress from d(E/N)/d(frac,cell)."""
     grad_frac, grad_lattice = torch.autograd.grad(
-        energy_eV_atom, (frac, lattice), retain_graph=True, create_graph=False
+        energy_eV_atom, (frac, lattice), retain_graph=True,
+        create_graph=create_graph,
     )
     atom_count = frac.shape[1]
     cell = lattice[0]
@@ -72,6 +86,20 @@ def relaxation_metrics_from_energy_gradient(
     return torch.linalg.vector_norm(forces, dim=-1).amax(), torch.linalg.matrix_norm(
         stress, ord="fro"
     )
+
+
+def relaxation_barrier(
+    fmax: torch.Tensor, stress_fro: torch.Tensor,
+    config: HybridLBFGSConfig,
+) -> torch.Tensor:
+    """Smooth force/stress feasibility penalties for source-space gradients."""
+    force = F.softplus(
+        (fmax - config.force_tolerance_eV_A) / 0.01
+    ).square()
+    stress = F.softplus(
+        (stress_fro - config.stress_tolerance_eV_A3) / 0.0001
+    ).square()
+    return config.force_barrier_weight * force + config.stress_barrier_weight * stress
 
 
 class HybridLBFGSSolver:
@@ -149,24 +177,34 @@ class HybridLBFGSSolver:
                 descriptor = crystal_descriptor(types, frac, lattice, self.mask)
                 novelty = self.novelty_index.smooth_score(descriptor).mean()
             volume_penalty = constraints["volume"]
+            property_loss = (
+                config.property_energy_weight
+                * ((raw_hull - 0.0) / config.property_energy_scale).square()
+                + config.property_novelty_weight
+                * ((config.novelty_target - novelty) / config.property_novelty_scale).square()
+            )
             source_drift = (
                 (z_frac - initial_frac).square().mean()
                 + (z_lattice - initial_lattice).square().mean()
             )
             hull_excess = F.relu(raw_hull - config.hull_threshold_eV_atom)
             merit = (
-                config.hull_weight * raw_hull
+                property_loss
                 + config.hull_violation_weight * hull_excess.square()
                 + config.distance_weight * constraints["distance"]
                 + config.p_coordination_weight * constraints["p_coordination"]
                 + config.fe_coordination_weight * constraints["fe_coordination"]
+                + config.poly_center_weight * constraints["poly_center"]
+                + config.poly_face_weight * constraints["poly_face"]
+                + config.poly_coplanar_weight * constraints["poly_coplanar"]
                 + config.volume_weight * volume_penalty
                 - config.novelty_weight * novelty
                 + config.source_prior_weight * source_drift
             )
             fmax, stress_fro = relaxation_metrics_from_energy_gradient(
-                energy, frac, lattice
+                energy, frac, lattice, create_graph=True
             )
+            merit = merit + relaxation_barrier(fmax, stress_fro, config)
             merit.backward()
             if not bool(torch.isfinite(merit) and torch.isfinite(z_frac.grad).all()
                         and torch.isfinite(z_lattice.grad).all()):
@@ -360,20 +398,29 @@ class UnconditionalHybridLBFGSSolver:
             if config.hull_feasibility_only:
                 merit = 0.5 * hull_excess.square()
             else:
+                property_loss = (
+                    config.property_energy_weight
+                    * (raw_hull / config.property_energy_scale).square()
+                    + config.property_novelty_weight
+                    * ((config.novelty_target - novelty) / config.property_novelty_scale).square()
+                )
                 merit = (
-                    config.hull_weight * raw_hull
+                    property_loss
                     + config.hull_violation_weight * hull_excess.square()
                     + config.distance_weight * geometry["distance"]
                     + config.p_coordination_weight * geometry["p_coordination"]
                     + config.fe_coordination_weight * geometry["fe_coordination"]
+                    + config.poly_center_weight * geometry["poly_center"]
+                    + config.poly_face_weight * geometry["poly_face"]
+                    + config.poly_coplanar_weight * geometry["poly_coplanar"]
                     + config.volume_weight * geometry["volume"]
                     + config.composition_weight * sum(composition.values())
-                    - config.novelty_weight * novelty
                     + config.source_prior_weight * drift
                 )
             fmax, stress_fro = relaxation_metrics_from_energy_gradient(
-                energy, frac, lattice
+                energy, frac, lattice, create_graph=True
             )
+            merit = merit + relaxation_barrier(fmax, stress_fro, config)
             merit.backward()
             gradients = (z_atom.grad, z_frac.grad, z_lattice.grad)
             if not bool(torch.isfinite(merit) and all(

@@ -378,6 +378,109 @@ def _assigned_coordination_losses(
     )
 
 
+def polyhedron_constraint_terms(
+    model: CrystalVectorField,
+    terminal: CrystalState,
+    mask: torch.Tensor,
+    bond_temperature_A: float = 0.10,
+    coplanar_temperature: float = 0.10,
+    theta_min_deg: float = 30.0,
+) -> dict[str, torch.Tensor]:
+    """Differentiable P/Fe--O center and Fe-polyhedron adjacency penalties.
+
+    Neighbor identities are selected from detached distances (an auxiliary
+    discrete assignment); all losses are evaluated on differentiable vectors.
+    This avoids pretending that top-k/neighbor selection itself has a gradient.
+    """
+    dtype = terminal.frac.dtype
+    device = terminal.frac.device
+    physical_lattice = unstandardize_lattice(
+        terminal.lattice, model.lattice_mean, model.lattice_std
+    )
+    lattice = decode_lattice(physical_lattice, mask.sum(dim=1))
+    frac = terminal.frac
+    delta = frac[:, :, None, :] - frac[:, None, :, :]
+    translations = torch.tensor(
+        [(i, j, k) for i in (-1.0, 0.0, 1.0)
+         for j in (-1.0, 0.0, 1.0) for k in (-1.0, 0.0, 1.0)],
+        dtype=dtype, device=device,
+    )
+    images = delta.unsqueeze(-2) + translations
+    vectors = torch.einsum("bijtd,bdk->bijtk", images, lattice)
+    distances = torch.linalg.vector_norm(vectors, dim=-1).clamp_min(1.0e-7)
+    nearest = distances.detach().argmin(dim=-1)
+    vectors = vectors.gather(
+        -2, nearest[..., None, None].expand(*nearest.shape, 1, 3)
+    ).squeeze(-2)
+    distances = distances.gather(-1, nearest[..., None]).squeeze(-1)
+
+    type_index = terminal.atom.argmax(dim=-1)
+    offsets = {element: i for i, element in enumerate(DEFAULT_SPEC.elements)}
+    oxygen = (type_index == offsets["O"]) & mask
+    phosphorus = (type_index == offsets["P"]) & mask
+    iron = (type_index == offsets["Fe"]) & mask
+    center_loss = frac.new_zeros(())
+    face_loss = frac.new_zeros(())
+    coplanar_loss = frac.new_zeros(())
+    center_count = 0
+    pair_count = 0
+    cos_limit = math.cos(math.radians(theta_min_deg))
+    for b in range(frac.shape[0]):
+        oxygen_indices = torch.where(oxygen[b])[0]
+        if oxygen_indices.numel() == 0:
+            continue
+        centers = torch.where((phosphorus[b] | iron[b]))[0]
+        memberships: dict[int, torch.Tensor] = {}
+        vectors_by_center: dict[int, torch.Tensor] = {}
+        for center in centers.tolist():
+            cutoff = (DEFAULT_SPEC.p_o_bond_cutoff
+                      if bool(phosphorus[b, center])
+                      else DEFAULT_SPEC.fe_o_bond_cutoff)
+            d = distances[b, center, oxygen_indices]
+            weights = torch.sigmoid((cutoff - d) / bond_temperature_A)
+            weights = weights / weights.sum().clamp_min(1.0e-8)
+            displacement = vectors[b, center, oxygen_indices]
+            center_loss = center_loss + (
+                (weights[:, None] * displacement).sum(dim=0).square().sum()
+            )
+            center_count += 1
+            memberships[center] = weights
+            vectors_by_center[center] = displacement
+        if centers.numel() < 2:
+            continue
+        fe_centers = [int(x) for x in centers.tolist() if bool(iron[b, x])]
+        for index, first in enumerate(fe_centers):
+            for second in fe_centers[index + 1:]:
+                w_first = memberships[first]
+                w_second = memberships[second]
+                shared = w_first * w_second
+                shared_count = shared.sum()
+                face_loss = face_loss + F.softplus(
+                    (shared_count - 2.0) / bond_temperature_A
+                ).square()
+                pair_count += 1
+                if oxygen_indices.numel() < 2:
+                    continue
+                top = shared.detach().topk(2).indices
+                u = vectors_by_center[first][top]
+                v = vectors_by_center[second][top]
+                normal_first = torch.linalg.cross(u[0], u[1])
+                normal_second = torch.linalg.cross(v[0], v[1])
+                denom = (
+                    torch.linalg.vector_norm(normal_first)
+                    * torch.linalg.vector_norm(normal_second)
+                ).clamp_min(1.0e-8)
+                cosine = (normal_first * normal_second).sum().abs() / denom
+                coplanar_loss = coplanar_loss + F.softplus(
+                    (cosine - cos_limit) / coplanar_temperature
+                ).square()
+    return {
+        "poly_center": center_loss / max(1, center_count),
+        "poly_face": face_loss / max(1, pair_count),
+        "poly_coplanar": coplanar_loss / max(1, pair_count),
+    }
+
+
 def terminal_constraint_terms(
     model: CrystalVectorField,
     terminal: CrystalState,
@@ -547,6 +650,7 @@ def terminal_constraint_terms(
         tm_geometry = polyhedron_geometry_loss(
             iron, 6, 2.00, tm_pair_target
         )
+    polyhedron = polyhedron_constraint_terms(model, terminal, mask)
     return {
         "distance": distance_loss,
         "p_coordination": p_loss,
@@ -554,6 +658,7 @@ def terminal_constraint_terms(
         "p_geometry": p_geometry,
         "fe_geometry": tm_geometry,
         "minimum_distance_A": distances.masked_fill(~pair_mask, 1.0e3).amin(),
+        **polyhedron,
     }
 
 

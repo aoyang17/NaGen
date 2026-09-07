@@ -9,7 +9,7 @@ import torch
 from torch.nn import functional as F
 
 from .differentiable_uma_hull import DifferentiableUMAHull
-from .hybrid_lbfgs import relaxation_metrics_from_energy_gradient
+from .hybrid_lbfgs import relaxation_barrier, relaxation_metrics_from_energy_gradient
 from .model import CrystalState, CrystalVectorField
 from .sample import decode_terminal, integrate_flow
 from .uma_guidance import EnergyFactory
@@ -32,6 +32,10 @@ class HybridAdamConfig:
     source_prior_weight: float = 2.0e-3
     consecutive_feasible_required: int = 10
     hull_feasibility_only: bool = False
+    force_barrier_weight: float = 20.0
+    stress_barrier_weight: float = 20.0
+    force_tolerance_eV_A: float = 0.01
+    stress_tolerance_eV_A3: float = 0.10 / 160.21766208
 
 
 @dataclass
@@ -148,8 +152,9 @@ class HybridProjectedAdamSolver:
                     + config.source_prior_weight * drift
                 )
             fmax, stress_fro = relaxation_metrics_from_energy_gradient(
-                energy, frac, lattice
+                energy, frac, lattice, create_graph=True
             )
+            loss = loss + relaxation_barrier(fmax, stress_fro, config)
             loss.backward()
             pre_clip_norm = torch.nn.utils.clip_grad_norm_(
                 variables, config.gradient_clip_norm
