@@ -229,7 +229,12 @@ def flow_matching_loss(
         (target_types - 1).clamp_min(0), num_classes=base_model.config.vocab_size
     ).to(dtype) * type_scale
     source_atom = target_atom if geometry_only else torch.randn_like(target_atom)
-    if coupling == "assignment":
+    if coupling == "polyhedral":
+        from .polyhedral_prior import polyhedral_source_frac
+        source_lattice = torch.randn_like(target_lattice)
+        source_matrix = base_model._lattice_matrix(source_lattice, mask.sum(dim=1))
+        source_frac = polyhedral_source_frac(target_types,mask,source_matrix)
+    elif coupling == "assignment":
         from .coupling import assignment_source_frac
 
         source_frac = assignment_source_frac(
@@ -248,7 +253,8 @@ def flow_matching_loss(
         )
     else:
         raise ValueError(f"unsupported coupling: {coupling!r}")
-    source_lattice = torch.randn_like(target_lattice)
+    if coupling != "polyhedral":
+        source_lattice = torch.randn_like(target_lattice)
     t = torch.rand(batch, 1, device=device, dtype=dtype).clamp_(1e-4, 1.0 - 1e-4)
     atom_t = (
         target_atom

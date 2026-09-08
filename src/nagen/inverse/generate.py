@@ -279,6 +279,8 @@ def generate_conditioned_geometry_batch(
     integrator: str = "midpoint",
     terminal_steps: int = 400,
     terminal_lr: float = 0.02,
+    source_mode: str = "uniform",
+    end_time: float = 1.0,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Sample X,L from p(X,L|N,A) for previously DFlow-generated N,A.
 
@@ -305,14 +307,25 @@ def generate_conditioned_geometry_batch(
         num_classes=geometry_model.config.vocab_size,
     ).to(dtype=next(geometry_model.parameters()).dtype)
     conditioned_atom = conditioned_atom * 2.0 * mask.unsqueeze(-1)
+    source_lattice=torch.randn(
+            len(type_sequences), 6, device=device, generator=generator
+        )
+    if source_mode == 'uniform':
+        source_frac=torch.rand(
+            len(type_sequences), n_max, 3, device=device, generator=generator
+        )
+    elif source_mode == 'polyhedral':
+        from .polyhedral_prior import polyhedral_source_frac
+        source_matrix=geometry_model._lattice_matrix(source_lattice,lengths)
+        # The prior uses the canonical Na/Fe/P/O index convention recorded by
+        # NaGen packed datasets.
+        source_frac=polyhedral_source_frac(generated_types,mask,source_matrix,generator=generator)
+    else:
+        raise ValueError(f'unsupported source_mode: {source_mode}')
     source = CrystalState(
         conditioned_atom,
-        torch.rand(
-            len(type_sequences), n_max, 3, device=device, generator=generator
-        ),
-        torch.randn(
-            len(type_sequences), 6, device=device, generator=generator
-        ),
+        source_frac,
+        source_lattice,
     )
     with torch.no_grad():
         terminal = integrate_flow(
@@ -322,6 +335,7 @@ def generate_conditioned_geometry_batch(
             steps=ode_steps,
             method=integrator,
             freeze_atom=True,
+            end_time=end_time,
         )
     if terminal_steps > 0:
         terminal, _ = optimize_terminal(

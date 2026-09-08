@@ -2,7 +2,13 @@
 
 NaGen 是面向 Na–Fe–P–O 磷酸盐正极的统一 Dflow / ShootingFlow 晶体生成与约束优化项目。
 
-唯一算法规范：
+最新四层约束实验：
+
+- [固定 N/A 生成器与新候选实验](docs/ConditionalGenerationExperiment.md)：从原始几何训练条件 flow，CHGNet 能量引导与同查询预算上限随机对照；不再弛豫训练集。
+- [CHGNet 可运行实验](docs/CHGNetExperiment.md)：无需 HF 授权的能量/力后端、NAXL 梯度桥接、有限参考集 hull、四层筛选及 BSCC 作业脚本。
+- [docs/FourStageExperiment.md](docs/FourStageExperiment.md)：Conditioning → Hard Gates → Robust Ranking → Diversity Selection；实现位于 `src/nagen/selection/`，包含本地小样本审计及待完成的全量实验。
+
+已有 weighted baseline 算法规范：
 
 - [docs/Algorithm.md](docs/Algorithm.md)：推理流程与模块路径；
 - [docs/HybridOptimization.md](docs/HybridOptimization.md)：统一目标和全部约束。

@@ -23,9 +23,12 @@ def integrate_flow(
     steps: int = 24,
     method: str = "midpoint",
     freeze_atom: bool = False,
+    end_time: float = 1.0,
 ) -> CrystalState:
+    if not 0.0 <= end_time <= 1.0:
+        raise ValueError("end_time must lie in [0,1]")
     state = source
-    dt = 1.0 / steps
+    dt = end_time / steps
     for step in range(steps):
         t0 = torch.full(
             (mask.shape[0], 1), step * dt, dtype=source.atom.dtype, device=source.atom.device

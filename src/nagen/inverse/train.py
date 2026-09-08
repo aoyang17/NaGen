@@ -112,6 +112,7 @@ def validate(
     max_batches: int = 100,
     geometry_only: bool = False,
     geometry_validity_weight: float = 0.0,
+    coupling: str = "noise",
 ) -> dict[str, float]:
     model.eval()
     totals: dict[str, float] = defaultdict(float)
@@ -133,6 +134,7 @@ def validate(
             batch["mask"],
             geometry_only=geometry_only,
             geometry_validity_weight=geometry_validity_weight,
+            coupling=coupling,
         )
         for key, value in metrics.items():
             totals[key] += float(value)
@@ -166,6 +168,7 @@ def save_checkpoint(
     ema_model: CrystalVectorField | None = None,
     training_mode: str = "joint",
     geometry_validity_weight: float = 0.0,
+    coupling: str = "noise",
 ) -> None:
     payload = model.checkpoint_payload()
     sizes = torch.diff(dataset.data["offsets"])[dataset.indices]
@@ -176,12 +179,15 @@ def save_checkpoint(
             "history": history,
             "n_histogram": torch.bincount(sizes, minlength=int(sizes.max()) + 1),
             "element_to_index": dataset.data["element_to_index"],
-            "dataset_source_hash": dataset.data["source_first_1MiB_sha256"],
+            "dataset_source_hash": dataset.data.get(
+                "source_first_1MiB_sha256", dataset.data.get("source_hashes")
+            ),
             "dataset_version": dataset.data.get("version"),
             "dataset_filter": dataset.data.get("filter_definition"),
             "training_mode": training_mode,
             "training_objective": {
                 "geometry_validity_weight": geometry_validity_weight,
+                "coupling": coupling,
             },
         }
     )
@@ -209,6 +215,7 @@ def main() -> None:
     parser.add_argument("--init")
     parser.add_argument("--geometry-only", action="store_true")
     parser.add_argument("--geometry-validity-weight", type=float, default=0.0)
+    parser.add_argument("--coupling", choices=("noise", "assignment", "polyhedral"), default="noise")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -329,6 +336,7 @@ def main() -> None:
                     batch["mask"],
                     geometry_only=args.geometry_only,
                     geometry_validity_weight=args.geometry_validity_weight,
+                    coupling=args.coupling,
                 )
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -370,6 +378,7 @@ def main() -> None:
             device,
             geometry_only=args.geometry_only,
             geometry_validity_weight=args.geometry_validity_weight,
+            coupling=args.coupling,
         )
         record = {
             "epoch": epoch,
@@ -394,6 +403,7 @@ def main() -> None:
                 ema_model,
                 "geometry" if args.geometry_only else "joint",
                 args.geometry_validity_weight,
+                args.coupling,
             )
             if record["val_loss"] < best_validation:
                 best_validation = record["val_loss"]
@@ -402,6 +412,7 @@ def main() -> None:
                     base_model, optimizer, epoch, history, train_dataset,
                     ema_model, "geometry" if args.geometry_only else "joint",
                     args.geometry_validity_weight,
+                    args.coupling,
                 )
         if distributed:
             dist.barrier()

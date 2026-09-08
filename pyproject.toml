@@ -22,6 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+experiment = ["chgnet==0.4.2", "pymatgen==2025.10.7", "spglib==2.5.0", "numpy>=1.26,<2"]
 shooting = [
   "fairchem-core>=2.21,<2.22",
   "numpy>=2.0,<2.5",
