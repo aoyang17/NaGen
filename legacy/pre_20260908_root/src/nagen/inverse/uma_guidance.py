@@ -166,7 +166,6 @@ def load_uma_calculator_vjp_energy(
 
 def load_uma_calculator_vjp_factory(
     checkpoint: str, device: str = "cuda", task_name: str = "omat",
-    *, calculator=None,
 ) -> tuple[EnergyFactory, dict]:
     """Load UMA once and construct validated VJP energy functions per composition."""
     path = Path(checkpoint)
@@ -178,11 +177,10 @@ def load_uma_calculator_vjp_factory(
         from fairchem.core.units.mlip_unit import load_predict_unit
     except ImportError as error:
         raise RuntimeError("fairchem-core and ASE are required for UMA VJP") from error
-    if calculator is None:
-        predictor = load_predict_unit(
-            str(path), inference_settings="default", device=device
-        )
-        calculator = FAIRChemCalculator(predictor, task_name=task_name)
+    predictor = load_predict_unit(
+        str(path), inference_settings="default", device=device
+    )
+    calculator = FAIRChemCalculator(predictor, task_name=task_name)
 
     def factory(atomic_numbers: torch.Tensor) -> EnergyFunction:
         numbers = atomic_numbers.detach().long().flatten().cpu().tolist()
@@ -253,10 +251,11 @@ def load_uma_native_second_order_evaluator(
         raise RuntimeError("fairchem-core native prediction is required") from error
     # The default fast path uses torch.compile/AOTAutograd, which does not
     # support the double backward needed for force/stress constraint
-    # Jacobians.  The batch path is deliberately non-compiled and supports
-    # changing structures between optimizer evaluations.
+    # Jacobians.  ``traineval`` is deliberately non-compiled and supports
+    # changing structures between optimizer evaluations (older fairchem
+    # releases called the corresponding preset ``batch``).
     predictor = load_predict_unit(
-        str(path), inference_settings="batch", device=device
+        str(path), inference_settings="traineval", device=str(device)
     )
     initialized = False
 

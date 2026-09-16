@@ -9,15 +9,6 @@ from pathlib import Path
 from typing import Any
 
 
-def json_default(value: Any) -> Any:
-    """Serialize NumPy-like scalar and array values without importing NumPy."""
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "item"):
-        return value.item()
-    raise TypeError(type(value).__name__)
-
-
 def sha256_file(path: str | Path) -> str:
     """Return a file digest without loading the whole file into memory."""
     digest = hashlib.sha256()

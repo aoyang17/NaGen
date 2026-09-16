@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ShootingFlow · 优化目标与约束核验</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['$$', '$$']] }, options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    :root { --ink:#1e2b38; --grid:#d9e1e8; --objective:rgba(49,151,149,.15); --constraint:rgba(82,132,189,.11); --notrun:rgba(210,75,75,.13); }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:26px; color:var(--ink); background:#fff; font:14px/1.38 system-ui,"Microsoft YaHei",sans-serif; }
+    main { max-width:1260px; margin:auto; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th,td { border:1px solid var(--grid); padding:8px 11px; text-align:left; vertical-align:middle; }
+    th { background:#f3f6f8; font-weight:700; }
+    td:nth-child(1) { width:31%; font-weight:650; }
+    td:nth-child(2) { width:28%; }
+    .objective td { background:var(--objective); }
+    .constraint td { background:var(--constraint); }
+    .notrun td { background:var(--notrun); }
+    .tag { display:inline-block; padding:2px 7px; border-radius:99px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .objective .tag { color:#126966; background:rgba(49,151,149,.13); }
+    .constraint .tag { color:#345d93; background:rgba(82,132,189,.12); }
+    .notrun .tag { color:#a63939; background:rgba(210,75,75,.13); }
+    .warn { color:#a63939; font-weight:700; }
+    @media print { body { padding:10px; font-size:11px; } h1 { font-size:17px; margin-bottom:8px; } th,td { padding:5px 7px; } }
+  </style>
+</head>
+<body>
+<main>
+  <table>
+    <thead><tr><th>优化目标 / 约束</th><th>具体要求</th><th>当前结果符合情况</th></tr></thead>
+    <tbody>
+      <tr class="objective"><td><span class="tag">优化目标</span> 稳定性：最小化 \(E_{\rm hull}\)</td><td>目标 \(E_*=0\)；筛选上限 150 meV/atom</td><td>✓ UMA proxy：100.00–146.21 meV/atom<br>✗ MP2020：122–168 meV/atom（9/19 ≤150）</td></tr>
+      <tr class="objective"><td><span class="tag">优化目标</span> 新颖性：最大化 \(f_{\rm nov}\)</td><td>删除生成结构与参考结构中的 Na/Li/K/Mg；以 StructureMatcher.fit_anonymous 比较 Fe–P–O 骨架与 MP 化学空间 [Na,Li,K,Mg]–[Ti,V,Cr,Mn,Fe,Co,Ni,Y,Zr,Nb,Mo,Hf,Ta,W,Zn,Al,Ga,Ge,Cu]–[P,S,Si,B]–O 的任意去碱金属骨架；后续以 crystal graph 潜空间比较。</td><td>✓ 无匹配已知结构（当前参考）<br>评分 3.75–5.39 / 10；最近参考距离 \(d=0.01663\text{–}0.03241\)，\(d_0=0.02773\)</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 元素组成</td><td>仅 Na、Fe、P、O，且四种元素均出现</td><td>✓ Na<sub>6</sub>Fe<sub>6</sub>P<sub>8</sub>O<sub>32</sub></td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> Fe 平均形式价态</td><td>\(\bar z_{\rm Fe}\ge2\)</td><td>✓ \(\bar z_{\rm Fe}=3.0\)</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 理论比容量</td><td>\(C_{\rm th}\ge130\) mAh g<sup>−1</sup></td><td>✓ 130.4 mAh g<sup>−1</sup></td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 体积</td><td>10.5–20.5 Å<sup>3</sup>/atom</td><td>✓ 12.91–16.41 Å<sup>3</sup>/atom</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 原胞原子数</td><td>\(23\le N_{\rm prim}\le184\)</td><td>✓ 当前晶胞 \(N=52\)</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> PBC 最小距离</td><td>P–O ≥1.40；Fe–O ≥1.55；Na–O/O–O ≥2.00；P–P ≥2.60；Na–Na ≥2.20 Å</td><td>✓ 无 PBC 重叠；P–O 1.474–1.652 Å，Fe–O 1.791–2.428 Å</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> P–O 配位</td><td>\(r_{\rm P-O}\le2.00\) Å；CN(P)=4</td><td>✓ 全部 PO<sub>4</sub>，8/8 P 通过</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> Fe–O 配位</td><td>\(r_{\rm Fe-O}\le2.50\) Å；CN(Fe)∈{4,5,6}</td><td>✓ 每胞 6 个 Fe，均为 FeO<sub>4</sub>/FeO<sub>5</sub>/FeO<sub>6</sub></td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> P/Fe 多面体中心</td><td>P、Fe 严格位于各自 O 多面体内部</td><td>✓ 14/14 个 P、Fe 中心通过</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> Fe 多面体相邻关系</td><td>任意 Fe–Fe 共用 O 数 ≤2</td><td>✓ 不面共享 motif 门控通过</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 氧覆盖</td><td>全部 O 被骨架多面体覆盖</td><td>✓ 32/32 个 O 覆盖</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> UMA hull</td><td>\(E_{\rm hull}^{\rm UMA}\le150\) meV/atom</td><td>✓ 4,385 相冻结 proxy：100.00–146.21 meV/atom</td></tr>
+      <tr class="constraint"><td><span class="tag">约束</span> 原子力收敛</td><td>\(F_{\max}\le0.01\) eV Å<sup>−1</sup></td><td><span class="warn">✗ 0.01874–0.02996 eV Å<sup>−1</sup></span></td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "version": "nagen-surrogate-shootingflow-v1",
+  "description": "Frozen Flow + frozen periodic E_hull surrogate + source-space ShootingFlow optimization.",
+  "flow_checkpoint": "/mnt/data2/aobo/NaGen/inverse_v1/checkpoints/naxl_unconditional_surrogate_ready_v2.best.pt",
+  "surrogate_checkpoint": "/mnt/data2/aobo/NaGen/surrogate_ehull/runs/final_mace_v1/best_model.pt",
+  "packed_data": "/mnt/data2/aobo/NaGen/inverse_v1/data/naxl_packed_v1.pt",
+  "optimized_variables": ["z_X", "z_L"],
+  "fixed_variables": ["N", "A"],
+  "threshold_eV_atom": 0.15,
+  "defaults": {
+    "count": 128,
+    "batch_size": 8,
+    "max_atoms": 184,
+    "novelty_reference_count": 0,
+    "steps": 140,
+    "optimizer": "hybrid-alm",
+    "adam_steps": 120,
+    "lbfgs_steps": 20,
+    "restoration_steps": 60,
+    "lbfgs_history_size": 10,
+    "alm_outer_steps": 10,
+    "alm_initial_rho": 1.0,
+    "alm_rho_growth": 2.0,
+    "constraint_residual_scaling": "log1p",
+    "geometry_steps": 0,
+    "ode_steps": 24,
+    "property_energy_weight": 0.8,
+    "property_novelty_weight": 0.2,
+    "novelty_target": 1.0,
+    "energy_scale": 0.15,
+    "novelty_scale": 1.0,
+    "constraint_weight": 20.0,
+    "source_prior_weight": 0.01,
+    "gradient_clip_norm": 5.0,
+    "tau_distance": 0.08,
+    "tau_coord": 0.08,
+    "graph_refresh_steps": 10
+  },
+  "status": {
+    "uma_force_stress_barrier": "optional via --uma-checkpoint",
+    "true_e_hull_evaluation": false
+  }
+}

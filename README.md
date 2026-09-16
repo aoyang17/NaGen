@@ -1,29 +1,43 @@
 # NaGen
 
-NaGen 是面向 Na–Fe–P–O 磷酸盐正极的统一 Dflow / ShootingFlow 晶体生成与约束优化项目。
+NaGen generates constrained Na–Fe–P–O orthophosphate crystal candidates.
+This repository's production workflow is the UMA campaign that produced the
+September 10–11, 2026 candidate set. Earlier root-level implementations are
+preserved under `legacy/` and are not part of the active runtime path.
 
-唯一算法规范：
+## Production architecture
 
-- [docs/Algorithm.md](docs/Algorithm.md)：推理流程与模块路径；
-- [docs/HybridOptimization.md](docs/HybridOptimization.md)：统一目标和全部约束。
+1. Fix the `Na6Fe6P8O32` composition and draw a polyhedral source state.
+2. Optimize source coordinates and lattice for 12 steps with UMA energy and
+   differentiable geometric constraints.
+3. Integrate the frozen geometry DFlow for 48 midpoint steps.
+4. Relax at fixed cell with UMA/FIRE, then validate promising candidates using
+   default UMA inference.
+5. Require exact coordination, geometry, force, finite same-UMA reference-hull,
+   framework novelty, cross-candidate uniqueness, and CIF round-trip checks.
 
-## 推理主线
+The finite reference hull is a same-UMA proxy, not a complete DFT phase diagram.
 
-冻结无条件 Flow Matching，从 Na–Fe–P–O 噪声生成第一波样本；固定离散 (N,A)，用 E_hull surrogate、几何约束、UMA 力/应力约束和新颖性目标，对初始噪声 (z_X,z_L) 做 source-space 梯度优化；再从优化后的噪声完整积分 Flow，得到最终结构并执行精确验收。
+## Entrypoints
 
-## 已训练模型
+- `tools/run_uma_campaign.py`: resumable multi-worker generation, relaxation,
+  gates, hull proxy, and incremental selection.
+- `tools/generate_uma_guided_framework_candidates.py`: single-batch generation
+  and UMA-guided source optimization.
+- `tools/select_framework_candidates.py`: offline strict selection and ranking.
+- `tools/audit_uma_campaign.py`: independent final-CIF validation.
+- `tools/audit_crossmetal_novelty.py`: the September 11 cross-metal novelty audit.
 
-- Flow Matching：`/mnt/data2/aobo/NaGen/inverse_v1/checkpoints/naxl_unconditional_surrogate_ready_v2.best.pt`
-- E_hull surrogate：`/mnt/data2/aobo/NaGen/surrogate_ehull/runs/final_mace_v1/best_model.pt`
+`runs/` is a symlink to the immutable 9.10–9.11 experiment assets, including
+the flow checkpoint, conditioning profile, reference labels, campaign records,
+and selected structures.
 
-## 运行
+## Run the campaign
 
 ```bash
-PYTHONPATH=src:.pylibs \
-python tools/run_surrogate_shootingflow.py \
-  --flow /mnt/data2/aobo/NaGen/inverse_v1/checkpoints/naxl_unconditional_surrogate_ready_v2.best.pt \
-  --surrogate /mnt/data2/aobo/NaGen/surrogate_ehull/runs/final_mace_v1/best_model.pt \
-  --out outputs/shootingflow.json
+tools/launch_uma_campaign.sh
 ```
 
-UMA 力/应力 barrier 通过 `--uma-checkpoint` 启用。soft 约束仅用于梯度搜索；最终结构必须进行精确 PBC 距离、整数配位、力和应力验收，不执行独立生成后弛豫。
+Use `tools/launch_uma_campaign.sh --audit` to revalidate the campaign's
+exported CIFs. See [UMACampaign24.md](docs/UMACampaign24.md) for the frozen
+protocol and artifact layout.

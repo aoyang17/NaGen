@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nagen"
+version = "0.1.0"
+description = "Constrained generation for sodium cathode crystal structures"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "ase",
+  "matplotlib",
+  "networkx",
+  "numpy",
+  "orjson",
+  "packaging",
+  "pymatgen",
+  "scipy",
+  "spglib",
+  "torch",
+]
+
+[project.optional-dependencies]
+shooting = [
+  "fairchem-core>=2.21,<2.22",
+  "numpy>=2.0,<2.5",
+  "torch>=2.8,<2.9",
+]
+ipopt = [
+  "casadi>=3.7,<3.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
