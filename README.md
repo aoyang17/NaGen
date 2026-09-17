@@ -30,18 +30,16 @@ These four components together form the design variables of the generative optim
 The finite reference hull is a same-UMA proxy, not a complete DFT phase diagram.
 
 
-# The optimization problem formulation
-
-# ShootingFlow · Design Variables, Optimization Objectives, and Constraint Verification
+# ShootingFlow · Optimization Objectives, Design Variables, and Constraint Verification
 
 | Type | Item | Requirement / Definition | Current Result / Notes |
 |---|---|---|---|
+| ![Objective](https://img.shields.io/badge/-Objective-2ea44f?style=flat-square) | Stability: minimize \(E_{\rm hull}\) | \(\le 150\ \text{meV/atom}\) | ✓ Result range: 122–168 meV/atom; 50% compliant |
+| ![Objective](https://img.shields.io/badge/-Objective-2ea44f?style=flat-square) | Novelty: maximize \(f_{\rm nov}\) | Fe–P–O framework after alkali-metal removal | ✓ No match to known structures |
 | ![Design Variable](https://img.shields.io/badge/-Design_Variable-8250df?style=flat-square) | Number of atoms | \(N\in\mathbb Z_{>0}\) | Total number of atoms in the periodic cell. |
 | ![Design Variable](https://img.shields.io/badge/-Design_Variable-8250df?style=flat-square) | Element sequence | \(\mathbf A=(a_i)_{i=1}^{N}\) | Specifies the element at each atomic site. |
 | ![Design Variable](https://img.shields.io/badge/-Design_Variable-8250df?style=flat-square) | Fractional coordinates | \(\mathbf X=(\mathbf x_i)_{i=1}^{N},\ \mathbf x_i\in[0,1)^3\) | Specifies atomic positions within the cell; also the atomic-position variable updated by the original relaxation task. |
 | ![Design Variable](https://img.shields.io/badge/-Design_Variable-8250df?style=flat-square) | Lattice matrix | \(\mathbf L\in\mathbb R^{3\times3}\) | Specifies cell size and shape; also the variable updated by the original relaxation task through the cell filter. |
-| ![Objective](https://img.shields.io/badge/-Objective-2ea44f?style=flat-square) | Stability: minimize \(E_{\rm hull}\) | \(\le 150\ \text{meV/atom}\) | ✓ Result range: 122–168 meV/atom; 50% compliant |
-| ![Objective](https://img.shields.io/badge/-Objective-2ea44f?style=flat-square) | Novelty: maximize \(f_{\rm nov}\) | Fe–P–O framework after alkali-metal removal | ✓ No match to known structures |
 | ![Constraint](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Elemental composition | Only Na, Fe, P, O, and all four elements present | ✓ Na<sub>6</sub>Fe<sub>6</sub>P<sub>8</sub>O<sub>32</sub> |
 | ![Constraint](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Average formal valence of Fe | \(\bar z_{\rm Fe} \ge 2\) | ✓ \(\bar z_{\rm Fe} = 3.0\) |
 | ![Constraint](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Theoretical specific capacity | \(C_{\rm th} \ge 130\) mAh g⁻¹ | ✓ 130.4 mAh g⁻¹ |
