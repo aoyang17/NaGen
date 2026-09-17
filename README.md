@@ -19,7 +19,7 @@ preserved under `legacy/` and are not part of the active runtime path.
 The finite reference hull is a same-UMA proxy, not a complete DFT phase diagram.
 
 
-# ShootingFlow · Optimization Objectives and Constraint Verification
+# The optimization problem formulation
 
 | Type | Optimization Objective / Constraint | Requirement | Current Result / Compliance |
 |---|---|---|---|
