@@ -11,7 +11,7 @@ I adopt the $(N, \mathbf{A}, \mathbf{X}, \mathbf{L})$ crystal representation str
 
 - $N \in \mathbb{Z}_{>0}$ is the total number of atoms in the periodic cell;
 - $\mathbf{A} = (a_i)_{i=1}^{N}$ specifies the element at each atomic site;
-- $\mathbf{X} = (\mathbf{x}_i)_{i=1}^{N}$, with $\mathbf{x}_i \in [0,1)^3$, specifies the atomic positions within the cell, and is also the atomic-position variable updated by the original relaxation task;
+- $\mathbf{X} = (x_i)_{i=1}^{N}$, with $x_i \in [0,1)^3$, specifies the atomic positions within the cell, and is also the atomic-position variable updated by the original relaxation task;
 - $\mathbf{L} \in \mathbb{R}^{3\times3}$ specifies the cell size and shape, and is the variable updated by the original relaxation task through the cell filter.
 
 These four components together form the design variables of the generative optimization problem.
