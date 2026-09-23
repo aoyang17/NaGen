@@ -2,11 +2,11 @@ import unittest
 from types import SimpleNamespace
 import torch
 
-from nagen.inverse.guidance import _coordination_assignment, terminal_constraint_terms
-from nagen.inverse.model import (
+from shootingcsp.inverse.guidance import _coordination_assignment, terminal_constraint_terms
+from shootingcsp.inverse.model import (
     CrystalState, CrystalVectorField, FlowConfig, flow_matching_loss,
 )
-from nagen.inverse.spec import DEFAULT_SPEC
+from shootingcsp.inverse.spec import DEFAULT_SPEC
 
 
 class TerminalGuidanceTests(unittest.TestCase):

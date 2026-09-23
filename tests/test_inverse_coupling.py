@@ -1,6 +1,6 @@
 import torch
 
-from nagen.inverse.coupling import assignment_source_frac
+from shootingcsp.inverse.coupling import assignment_source_frac
 
 
 def test_assignment_source_is_valid_and_species_relabel_only():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from nagen.surrogate import (
+from shootingcsp.surrogate import (
     SurrogateSpec,
     available_surrogates,
     load_surrogate,

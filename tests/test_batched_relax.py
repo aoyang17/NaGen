@@ -3,7 +3,7 @@ from ase.calculators.calculator import Calculator, all_changes
 from ase.optimize import FIRE
 import numpy as np
 
-from nagen.selection.batched_relax import fire_batch
+from shootingcsp.selection.batched_relax import fire_batch
 
 
 class Harmonic(Calculator):

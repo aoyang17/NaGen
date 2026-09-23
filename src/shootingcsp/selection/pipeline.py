@@ -14,7 +14,7 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from scipy.stats import rankdata
 
-from nagen.inverse.spec import (
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     normalize_fe_coordination_options,
 )

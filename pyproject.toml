@@ -1,13 +1,37 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nagen"
+name = "shootingcsp"
 version = "0.1.0"
-description = "Constrained generation for sodium cathode crystal structures"
+description = "ShootingCSP: constrained crystal structure prediction powered by ShootingFlow"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Aobo Yang" },
+]
+keywords = [
+  "crystal-structure-prediction",
+  "generative-models",
+  "flow-matching",
+  "optimal-control",
+  "materials-science",
+  "shootingflow",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Chemistry",
+  "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
   "ase",
   "matplotlib",
@@ -21,15 +45,34 @@ dependencies = [
   "torch",
 ]
 
-[project.scripts]
-nagen-train-flow = "nagen.training.train_flow:main"
-
 [project.optional-dependencies]
 shooting = [
   "fairchem-core>=2.21,<2.22",
   "numpy>=2.0,<2.5",
   "torch>=2.8,<2.9",
 ]
+dev = [
+  "build>=1.2",
+  "pytest>=8",
+]
+
+[project.scripts]
+shootingcsp-train-flow = "shootingcsp.training.train_flow:main"
+
+[project.urls]
+Homepage = "https://github.com/aoyang17/NaGen"
+Repository = "https://github.com/aoyang17/NaGen"
+Issues = "https://github.com/aoyang17/NaGen/issues"
+Changelog = "https://github.com/aoyang17/NaGen/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["shootingcsp*"]
+exclude = ["nagen*", "test*"]
+
+[tool.setuptools.package-data]
+shootingcsp = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

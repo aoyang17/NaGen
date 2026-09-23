@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from nagen.inverse.uma_guidance import load_uma_calculator_vjp_factory
+from shootingcsp.inverse.uma_guidance import load_uma_calculator_vjp_factory
 from .base import EnergyFunction, SurrogateSpec
 from .registry import register_surrogate
 
@@ -37,7 +37,7 @@ class UMASurrogate:
         return dict(self._provenance or {})
 
     def evaluator(self, inference_settings: str = "default"):
-        from nagen.selection.uma import UMAEvaluator
+        from shootingcsp.selection.uma import UMAEvaluator
 
         settings = (
             inference_settings

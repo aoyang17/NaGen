@@ -1,10 +1,38 @@
 [中文](README.md) | [English](README.en.md)
 
-# ShootingFlow CSP (Crystal Structure Prediction)
+# ShootingCSP (High-Precision Controllable Crystal Structure Generation)
 
-ShootingFlow CSP enables high-precision, controllable crystal structure generation. It formulates geometric/property constraints on target crystals as an optimization problem and progressively propagates them into generative inference, yielding crystals that conform to both the data manifold (prior knowledge of target crystals) and high-dimensional constraints. Its core algorithm, ShootingFlow, casts flow-matching inference and optimization as a boundary value problem solved via the shooting method from optimal control theory.
+ShootingCSP is a Python library for high-precision, controllable crystal structure generation. It formulates geometric/property constraints on target crystals as an optimization problem and progressively propagates them into generative inference, yielding crystals that conform to both the data manifold (prior knowledge of target crystals) and high-dimensional constraints. Its core algorithm, ShootingFlow, casts flow-matching inference and optimization as a boundary value problem solved via the shooting method from optimal control theory.
 
 We take Na-Fe-P-O orthophosphate crystal generation mission as an example. The project comprises three modules: crystal representation, which parameterizes crystal encoding; generative architecture, which learns the mathematical manifold; and a surrogate model, which provides physical estimates. We describe these three components in turn.
+
+## Installation
+
+Install the development release from the repository:
+
+```bash
+python -m pip install -e ".[shooting]"
+```
+
+Core Python API:
+
+```python
+from shootingcsp.generation import optimize_source_with_surrogate
+from shootingcsp.surrogate import SurrogateSpec, load_surrogate
+from shootingcsp.training.train_flow import main as train_flow
+```
+
+Retrain or fine-tune the Flow:
+
+```bash
+python -m shootingcsp.training.train_flow --help
+```
+
+Dataset adapters and independent surrogate-model interfaces are documented in
+[TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md).
+
+The initial library release is version `0.1.0` under the MIT License. Citation
+metadata is provided in `CITATION.cff`.
 
 ## Crystal representation
 

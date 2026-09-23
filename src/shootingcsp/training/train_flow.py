@@ -2,14 +2,14 @@
 
 Examples
 --------
-Packed NaGen dataset::
+Packed ShootingCSP dataset::
 
-    python -m nagen.training.train_flow \
+    python -m shootingcsp.training.train_flow \
       --dataset data/packed/naxl.pt --dataset-kind packed --out runs/flow.pt
 
 JSONL dataset with A/X_frac/L_matrix fields::
 
-    python -m nagen.training.train_flow \
+    python -m shootingcsp.training.train_flow \
       --dataset data/train.jsonl --dataset-kind jsonl \
       --train-split train --val-split val --out runs/flow.pt
 """
@@ -34,14 +34,14 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, Sampler
 
-from nagen.inverse.dataset import collate_crystals
-from nagen.inverse.lattice import encode_lattice, standardize_lattice
-from nagen.inverse.model import CrystalVectorField, FlowConfig, flow_matching_loss
-from nagen.inverse.spec import (
+from shootingcsp.inverse.dataset import collate_crystals
+from shootingcsp.inverse.lattice import encode_lattice, standardize_lattice
+from shootingcsp.inverse.model import CrystalVectorField, FlowConfig, flow_matching_loss
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     parse_fe_coordination_options,
 )
-from nagen.training.data import CrystalDataset, DatasetSpec, load_crystal_dataset
+from shootingcsp.training.data import CrystalDataset, DatasetSpec, load_crystal_dataset
 
 
 class AtomBudgetBatchSampler(Sampler[list[int]]):

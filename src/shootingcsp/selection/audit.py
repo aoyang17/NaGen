@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nagen.inverse.spec import (
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     parse_fe_coordination_options,
 )

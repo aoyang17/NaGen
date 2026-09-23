@@ -7,13 +7,13 @@
 内置入口：
 
 ```bash
-python -m nagen.training.train_flow --help
+python -m shootingcsp.training.train_flow --help
 ```
 
-Packed NaGen 数据集：
+Packed ShootingCSP 数据集：
 
 ```bash
-python -m nagen.training.train_flow \
+python -m shootingcsp.training.train_flow \
   --dataset /path/to/packed.pt \
   --dataset-kind packed \
   --train-split train \
@@ -27,7 +27,7 @@ python -m nagen.training.train_flow \
 JSONL 数据集：
 
 ```bash
-python -m nagen.training.train_flow \
+python -m shootingcsp.training.train_flow \
   --dataset /path/to/dataset.jsonl \
   --dataset-kind jsonl \
   --train-split train \
@@ -94,7 +94,7 @@ class Dataset:
 注册代码示例：
 
 ```python
-from nagen.training.data import register_dataset
+from shootingcsp.training.data import register_dataset
 
 def load_my_dataset(path, *, split, **options):
     return MyDataset(path, split=split, **options)
@@ -105,7 +105,7 @@ register_dataset("my-format", load_my_dataset)
 也可以通过外部模块直接加载：
 
 ```bash
-python -m nagen.training.train_flow \
+python -m shootingcsp.training.train_flow \
   --dataset /path/to/data \
   --dataset-factory my_package.datasets:load_my_dataset \
   --dataset-option key=value \
@@ -139,7 +139,7 @@ backend = "uma"
 注册自定义 backend：
 
 ```python
-from nagen.surrogate import register_surrogate
+from shootingcsp.surrogate import register_surrogate
 
 def load_my_surrogate(spec):
     return MySurrogate(spec)
@@ -175,10 +175,10 @@ python tools/generate_uma_guided_framework_candidates.py \
 ## 4. src 中的公共入口
 
 ```text
-nagen.training.train_flow.main
-nagen.training.data.load_crystal_dataset
-nagen.training.data.register_dataset
-nagen.generation.optimize_source_with_surrogate
-nagen.surrogate.load_surrogate
-nagen.surrogate.register_surrogate
+shootingcsp.training.train_flow.main
+shootingcsp.training.data.load_crystal_dataset
+shootingcsp.training.data.register_dataset
+shootingcsp.generation.optimize_source_with_surrogate
+shootingcsp.surrogate.load_surrogate
+shootingcsp.surrogate.register_surrogate
 ```

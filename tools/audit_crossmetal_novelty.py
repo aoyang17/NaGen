@@ -189,8 +189,8 @@ def evaluate():
     from pymatgen.analysis.structure_matcher import StructureMatcher
     from networkx.algorithms.isomorphism import categorical_node_match
     sys.path.insert(0,str(ROOT/'src'))
-    from nagen.selection.pipeline import Crystal
-    from nagen.selection.diversity import descriptor, distances
+    from shootingcsp.selection.pipeline import Crystal
+    from shootingcsp.selection.diversity import descriptor, distances
     from select_framework_candidates import coordination_graph
     pool=json.loads((OUT/'local_references.json').read_text())
     refs=pool['references']
@@ -271,8 +271,8 @@ def summarize():
     import numpy as np
     from pymatgen.core import Structure
     sys.path.insert(0,str(ROOT/'src'))
-    from nagen.selection.pipeline import Crystal
-    from nagen.selection.diversity import descriptor,distances
+    from shootingcsp.selection.pipeline import Crystal
+    from shootingcsp.selection.diversity import descriptor,distances
     result=json.loads((OUT/'results.json').read_text())
     pool=json.loads((OUT/'local_references.json').read_text())
     features=[]

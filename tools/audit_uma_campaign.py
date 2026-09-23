@@ -14,11 +14,11 @@ from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from nagen.inverse._io import sha256_file as sha256
-from nagen.inverse.spec import DEFAULT_FE_COORDINATION_OPTIONS
-from nagen.selection.pipeline import Crystal, Conditioning, hard_gates, robust_rank, diversity_select
-from nagen.selection.uma import UMAEvaluator
-from nagen.selection.diversity import distances
+from shootingcsp.inverse._io import sha256_file as sha256
+from shootingcsp.inverse.spec import DEFAULT_FE_COORDINATION_OPTIONS
+from shootingcsp.selection.pipeline import Crystal, Conditioning, hard_gates, robust_rank, diversity_select
+from shootingcsp.selection.uma import UMAEvaluator
+from shootingcsp.selection.diversity import distances
 from run_uma_campaign import Collector, inputs, load_hull, write_json
 
 

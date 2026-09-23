@@ -16,15 +16,15 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from nagen.generation import optimize_source_with_surrogate, optimize_source_with_uma
-from nagen.inverse.generate import load_model
-from nagen.surrogate import SurrogateSpec, load_surrogate
-from nagen.inverse._io import json_default, sha256_file as sha256
-from nagen.inverse.spec import (
+from shootingcsp.generation import optimize_source_with_surrogate, optimize_source_with_uma
+from shootingcsp.inverse.generate import load_model
+from shootingcsp.surrogate import SurrogateSpec, load_surrogate
+from shootingcsp.inverse._io import json_default, sha256_file as sha256
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     parse_fe_coordination_options,
 )
-from nagen.selection.pipeline import Crystal, Conditioning, hard_gates, neighbors
+from shootingcsp.selection.pipeline import Crystal, Conditioning, hard_gates, neighbors
 
 
 def catastrophic_reason(crystal: Crystal) -> str | None:
@@ -51,7 +51,7 @@ def make_source(model, type_indices, seed: int, source_mode: str):
     if source_mode == "uniform":
         frac = torch.rand(1, count, 3, device=device, generator=generator)
     elif source_mode == "polyhedral":
-        from nagen.inverse.polyhedral_prior import polyhedral_source_frac
+        from shootingcsp.inverse.polyhedral_prior import polyhedral_source_frac
         source_matrix = model._lattice_matrix(lattice, torch.tensor([count], device=device))
         frac = polyhedral_source_frac(type_indices[None], mask, source_matrix, generator=generator)
     else:

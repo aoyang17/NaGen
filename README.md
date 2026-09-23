@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README.en.md)
 
-ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标晶体的几何/性质约束表述为优化问题，并将这些约束逐步传播到生成式推理过程中，从而生成同时符合数据流形（目标晶体的先验知识）与高维约束的晶体。其核心算法 ShootingFlow 将 flow-matching 推理与优化表述为由最优控制理论中的打靶法求解的边值问题。
+ShootingCSP 是面向高精度、可控晶体结构生成的 Python 库。它将目标晶体的几何/性质约束表述为优化问题，并将这些约束逐步传播到生成式推理过程中，从而生成同时符合数据流形（目标晶体的先验知识）与高维约束的晶体。其核心算法 ShootingFlow 将 flow-matching 推理与优化表述为由最优控制理论中的打靶法求解的边值问题。
 
 我们以 Na-Fe-P-O 磷酸盐晶体生成任务为例。项目包含三个模块：
 - 晶体表示，用于参数化晶体编码；
@@ -10,6 +10,33 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 - 代理模型，用于提供物理估计。下面依次介绍这三个部分。
 
 因为ShootingFlow是基于Optimal control theory的可控Flow matching生成，因此每针对一个新的晶体设计问题，我们会将其集成一个优化反问题进行描述。
+
+## 安装
+
+从仓库安装开发版本：
+
+```bash
+python -m pip install -e ".[shooting]"
+```
+
+基础 Python API：
+
+```python
+from shootingcsp.generation import optimize_source_with_surrogate
+from shootingcsp.surrogate import SurrogateSpec, load_surrogate
+from shootingcsp.training.train_flow import main as train_flow
+```
+
+重新训练或微调 Flow：
+
+```bash
+python -m shootingcsp.training.train_flow --help
+```
+
+数据集适配器和独立 surrogate model 接口见
+[TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md)。
+
+当前版本为 `0.1.0`，采用 MIT License。引用信息见 `CITATION.cff`。
 
 ## 一、晶体表示
 

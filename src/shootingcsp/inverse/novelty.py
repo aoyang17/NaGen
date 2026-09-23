@@ -227,7 +227,7 @@ def build_reference_index(
     std = torch.where(active, std, torch.full_like(std, float("inf")))
     standardized = ((stacked - mean) / std).float()
     payload = {
-        "version": "nagen-novelty-v1",
+        "version": "shootingcsp-novelty-v1",
         "config": asdict(DescriptorConfig()),
         "descriptors": standardized,
         "mean": mean.float(),

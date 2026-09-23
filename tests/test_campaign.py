@@ -6,15 +6,15 @@ from unittest.mock import patch
 
 import numpy as np
 
-from nagen.selection.hull import ReferenceHull
-from nagen.selection.pipeline import Crystal
+from shootingcsp.selection.hull import ReferenceHull
+from shootingcsp.selection.pipeline import Crystal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from run_uma_campaign import write_json, record, crystal, Collector
 
 
 def test_hull_cache_reuses_composition_not_candidate_energy():
-    import nagen.selection.hull as module
+    import shootingcsp.selection.hull as module
     hull = ReferenceHull([{"id": "one", "elements": ["Na", "O"], "energy_eV_atom": -2., "model_hash": "same"}], "same")
     with patch.object(module, "linprog", wraps=module.linprog) as solve:
         first = hull.evaluate(["Na", "O"], -1.8)

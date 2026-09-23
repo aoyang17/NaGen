@@ -2,7 +2,7 @@
 
 This adapter deliberately exposes only detached ASE quantities.  D-Flow source
 optimization uses the separate first-order VJP bridge in
-``nagen.inverse.uma_guidance``; final relaxation must be an independent,
+``shootingcsp.inverse.uma_guidance``; final relaxation must be an independent,
 reproducible calculation.
 """
 from __future__ import annotations

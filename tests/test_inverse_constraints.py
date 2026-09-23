@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from nagen.inverse.constraints import composition_metrics, evaluate_feasibility, theoretical_capacity
-from nagen.selection.pipeline import Crystal, Conditioning, hard_gates
-from nagen.inverse.spec import (
+from shootingcsp.inverse.constraints import composition_metrics, evaluate_feasibility, theoretical_capacity
+from shootingcsp.selection.pipeline import Crystal, Conditioning, hard_gates
+from shootingcsp.inverse.spec import (
     DEFAULT_SPEC,
     OptimizationSpec,
     parse_fe_coordination_options,
@@ -92,8 +92,8 @@ class ConstraintTests(unittest.TestCase):
         ]
         condition = Conditioning({"Na": 1, "Fe": 1, "P": 1, "O": 4})
         forces = np.zeros((len(elements), 3))
-        with patch("nagen.selection.pipeline.neighbors", return_value=[]), \
-             patch("nagen.selection.pipeline.motifs", return_value=rows):
+        with patch("shootingcsp.selection.pipeline.neighbors", return_value=[]), \
+             patch("shootingcsp.selection.pipeline.motifs", return_value=rows):
             allowed = hard_gates(
                 crystal, condition, profile, forces=forces,
                 motif_backend="native", fe_coordination_options=(4, 5, 6),

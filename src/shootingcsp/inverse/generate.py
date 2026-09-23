@@ -327,7 +327,7 @@ def generate_conditioned_geometry_batch(
         from .polyhedral_prior import polyhedral_source_frac
         source_matrix=geometry_model._lattice_matrix(source_lattice,lengths)
         # The prior uses the canonical Na/Fe/P/O index convention recorded by
-        # NaGen packed datasets.
+        # ShootingCSP packed datasets.
         source_frac=polyhedral_source_frac(generated_types,mask,source_matrix,generator=generator)
     else:
         raise ValueError(f'unsupported source_mode: {source_mode}')
@@ -424,7 +424,7 @@ def export_samples(
         )
         nearest = int(nearest_index[row])
         record = {
-            "candidate_id": f"NaGen-flow-{seed}-{row:05d}",
+            "candidate_id": f"ShootingCSP-flow-{seed}-{row:05d}",
             "seed": seed,
             "N": n_atoms,
             "formula": structure.composition.formula,

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from nagen.training.data import DatasetSpec, JsonlCrystalDataset, load_crystal_dataset
-from nagen.training.train_flow import main as train_flow_main
+from shootingcsp.training.data import DatasetSpec, JsonlCrystalDataset, load_crystal_dataset
+from shootingcsp.training.train_flow import main as train_flow_main
 
 
 def _record(split: str, seed: float) -> dict:

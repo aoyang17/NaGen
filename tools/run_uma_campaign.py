@@ -2,7 +2,7 @@
 
 One calculator per worker is shared by the force/stress VJP and fixed-cell FIRE.
 Each candidate is an atomic record; only the coordinator writes selected CIFs.
-Run with the existing NaGen Python. No alternate environment is required.
+Run with the existing ShootingCSP Python. No alternate environment is required.
 """
 from __future__ import annotations
 
@@ -23,14 +23,14 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from nagen.selection.audit import load_crystals
-from nagen.inverse._io import json_default, sha256_file as sha256
-from nagen.inverse.spec import (
+from shootingcsp.selection.audit import load_crystals
+from shootingcsp.inverse._io import json_default, sha256_file as sha256
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     parse_fe_coordination_options,
 )
-from nagen.selection.hull import ReferenceHull
-from nagen.selection.pipeline import Crystal, Conditioning, hard_gates
+from shootingcsp.selection.hull import ReferenceHull
+from shootingcsp.selection.pipeline import Crystal, Conditioning, hard_gates
 
 
 def write_json(path, value):
@@ -140,7 +140,7 @@ def finish_candidate(
 
 def batch_worker(args, model, indices, probabilities, energy_fn, evaluator, hull, condition, profile, config, get_validation):
     from ase import Atoms
-    from nagen.selection.batched_relax import fire_batch
+    from shootingcsp.selection.batched_relax import fire_batch
     from generate_uma_guided_framework_candidates import make_source, optimize_source_with_uma, catastrophic_reason
     fe_coordination_options = tuple(
         config.get("protocol", {}).get(
@@ -237,9 +237,9 @@ def batch_worker(args, model, indices, probabilities, energy_fn, evaluator, hull
 def worker(args):
     import torch
     from torch.nn import functional as F
-    from nagen.inverse.generate import load_model
-    from nagen.inverse.uma_guidance import load_uma_calculator_vjp_factory
-    from nagen.selection.uma import UMAEvaluator
+    from shootingcsp.inverse.generate import load_model
+    from shootingcsp.inverse.uma_guidance import load_uma_calculator_vjp_factory
+    from shootingcsp.selection.uma import UMAEvaluator
     from generate_uma_guided_framework_candidates import make_source, optimize_source_with_uma, catastrophic_reason
 
     torch.set_num_threads(args.threads)
@@ -354,7 +354,7 @@ class Collector:
     def __init__(self, out):
         from pymatgen.analysis.structure_matcher import StructureMatcher
         from select_framework_candidates import strip_na, structure, coordination_graph
-        from nagen.selection.diversity import descriptor
+        from shootingcsp.selection.diversity import descriptor
         self.out = Path(out)
         self.strip, self.structure, self.graph, self.descriptor = strip_na, structure, coordination_graph, descriptor
         self.matcher = StructureMatcher(ltol=.2, stol=.3, angle_tol=5, primitive_cell=True, scale=True, attempt_supercell=True)
@@ -393,7 +393,7 @@ class Collector:
     def consider(self, row):
         import networkx as nx
         from networkx.algorithms.isomorphism import categorical_node_match
-        from nagen.selection.diversity import distances
+        from shootingcsp.selection.diversity import distances
         from pymatgen.core import Structure
         from pymatgen.io.cif import CifWriter
         from pymatgen.analysis.structure_matcher import StructureMatcher
@@ -529,12 +529,12 @@ def coordinator(args):
     config["relax_batch_size"] = args.relax_batch_size
     config["source_sha256"] = {str(path.relative_to(ROOT)): sha256(path) for path in (
         Path(__file__).resolve(), ROOT / "tools/generate_uma_guided_framework_candidates.py",
-        ROOT / "src/nagen/inverse/uma_guidance.py", ROOT / "src/nagen/inverse/guidance.py",
-        ROOT / "src/nagen/inverse/constraints.py", ROOT / "src/nagen/inverse/spec.py",
-        ROOT / "src/nagen/selection/uma.py", ROOT / "src/nagen/selection/pipeline.py",
-        ROOT / "src/nagen/selection/hull.py",
-        ROOT / "src/nagen/selection/batched_relax.py",
-        ROOT / "src/nagen/selection/diversity.py", ROOT / "tools/select_framework_candidates.py")}
+        ROOT / "src/shootingcsp/inverse/uma_guidance.py", ROOT / "src/shootingcsp/inverse/guidance.py",
+        ROOT / "src/shootingcsp/inverse/constraints.py", ROOT / "src/shootingcsp/inverse/spec.py",
+        ROOT / "src/shootingcsp/selection/uma.py", ROOT / "src/shootingcsp/selection/pipeline.py",
+        ROOT / "src/shootingcsp/selection/hull.py",
+        ROOT / "src/shootingcsp/selection/batched_relax.py",
+        ROOT / "src/shootingcsp/selection/diversity.py", ROOT / "tools/select_framework_candidates.py")}
     write_json(config_path, config)
     collector = Collector(out)
     collector.consider(bootstrap(out, config))

@@ -6,10 +6,10 @@ from collections.abc import Callable
 
 import torch
 
-from nagen.inverse.guidance import _source_prior, soft_constraint_terms
-from nagen.inverse.model import CrystalState
-from nagen.inverse.sample import decode_terminal, integrate_flow
-from nagen.inverse.spec import (
+from shootingcsp.inverse.guidance import _source_prior, soft_constraint_terms
+from shootingcsp.inverse.model import CrystalState
+from shootingcsp.inverse.sample import decode_terminal, integrate_flow
+from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     normalize_fe_coordination_options,
 )

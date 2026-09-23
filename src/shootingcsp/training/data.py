@@ -2,7 +2,7 @@
 
 A dataset adapter only needs to expose ``__len__``, integer indexing, and the
 ``atom_counts``, ``element_to_index`` and ``metadata`` properties.  Items must
-follow the mapping format consumed by :func:`nagen.inverse.dataset.collate_crystals`.
+follow the mapping format consumed by :func:`shootingcsp.inverse.dataset.collate_crystals`.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ import torch
 from pymatgen.core import Structure
 from torch.utils.data import Dataset
 
-from nagen.inverse.dataset import PackedCrystalDataset, collate_crystals
-from nagen.inverse.spec import DEFAULT_SPEC
+from shootingcsp.inverse.dataset import PackedCrystalDataset, collate_crystals
+from shootingcsp.inverse.spec import DEFAULT_SPEC
 
 
 @runtime_checkable
@@ -187,7 +187,7 @@ class JsonlCrystalDataset(Dataset):
                     }
                 )
         self.metadata_doc = {
-            "version": "nagen-jsonl-v1",
+            "version": "shootingcsp-jsonl-v1",
             "source": self.path,
             "split": split,
             "source_records": source_records,

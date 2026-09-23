@@ -223,7 +223,7 @@ def flow_matching_loss(
         minimise total squared periodic displacement.  Permuting i.i.d. uniform
         points leaves the marginal exactly uniform, so this buys a short,
         low-variance regression target at no cost to the source distribution.
-        See `nagen.inverse.coupling` for why the ``"noise"`` coupling carries
+        See `shootingcsp.inverse.coupling` for why the ``"noise"`` coupling carries
         almost no information at sigma = 0.5.
     """
     batch, atoms = target_types.shape
@@ -252,7 +252,7 @@ def flow_matching_loss(
         # Wrapped N(0, 0.5^2) has an almost-uniform torus marginal.  It was also
         # meant to retain a site correspondence, but at sigma = 0.5 the pair
         # offset law is uniform to within 1e-4, so that correspondence is not
-        # actually present -- see nagen.inverse.coupling.
+        # actually present -- see shootingcsp.inverse.coupling.
         source_frac = torch.remainder(
             target_frac + coordinate_noise_sigma * torch.randn_like(target_frac), 1.0
         )

@@ -10,11 +10,11 @@ from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core import Structure
 from pymatgen.io.cif import CifWriter
 
-from nagen.selection.audit import load_crystals
-from nagen.selection.diversity import descriptor,distances,DESCRIPTOR_VERSION
-from nagen.inverse._io import sha256_file as sha256
-from nagen.selection.hull import ReferenceHull
-from nagen.selection.pipeline import Crystal,neighbors,robust_rank,diversity_select
+from shootingcsp.selection.audit import load_crystals
+from shootingcsp.selection.diversity import descriptor,distances,DESCRIPTOR_VERSION
+from shootingcsp.inverse._io import sha256_file as sha256
+from shootingcsp.selection.hull import ReferenceHull
+from shootingcsp.selection.pipeline import Crystal,neighbors,robust_rank,diversity_select
 
 
 def strip_na(c):

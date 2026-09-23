@@ -1,7 +1,7 @@
 import torch
-from nagen.inverse.polyhedral_prior import polyhedral_source_frac
-from nagen.inverse.sample import integrate_flow
-from nagen.inverse.model import CrystalState
+from shootingcsp.inverse.polyhedral_prior import polyhedral_source_frac
+from shootingcsp.inverse.sample import integrate_flow
+from shootingcsp.inverse.model import CrystalState
 
 
 def test_polyhedral_prior_exact_shape_and_po4_shells():
