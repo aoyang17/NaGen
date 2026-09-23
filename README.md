@@ -1,4 +1,4 @@
-# ShootingFlow CSP（晶体结构预测）
+# ShootingFlow CSP（高精度可控晶体结构生成）
 
 [中文](README.md) | [English](README.en.md)
 
@@ -6,7 +6,7 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 
 我们以 Na-Fe-P-O 磷酸盐晶体生成任务为例。项目包含三个模块：晶体表示，用于参数化晶体编码；生成架构，用于学习数学流形；代理模型，用于提供物理估计。下面依次介绍这三个部分。
 
-## 晶体表示
+## 一、晶体表示
 
 本项目采用 $(N, \mathbf{A}, \mathbf{X}, \mathbf{L})$ 晶体表示策略，其中：
 
@@ -17,7 +17,7 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 
 这四个部分共同构成生成优化问题的设计变量。
 
-## 生成架构
+## 二、生成架构
 
 1. 先固定离散组成：N = 52，A = Na6Fe6P8O32；仅优化 Flow 源变量 z_X 和 z_L。
 2. 使用冻结的几何 Flow，执行 12 步 source-space Adam 优化，并在每一步通过完整的 48 步 midpoint ODE 反向传播。
@@ -54,7 +54,7 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | UMA $E_{\mathrm{hull}}$ | $E_{\mathrm{hull}}^{\mathrm{UMA}} \le 150$ meV/atom | ✓ 100.00–146.21 meV/atom |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 原子力收敛 | $F_{\max} \le 0.03$ eV Å$^{-1}$ | ✓ 0.01874–0.02996 eV Å$^{-1}$ |
 
-## 代理模型
+## 三、代理模型
 
 本研究采用 [UMA](https://arxiv.org/abs/2506.23971) 作为力场代理模型，提供凸包上方能量 $E_{\mathrm{hull}}$ 和力 $F$ 对原子坐标 $X$ 与晶格参数 $L$ 的偏导数：
 
@@ -64,6 +64,7 @@ $$
 \frac{\partial F}{\partial X},\quad
 \frac{\partial F}{\partial L}.
 $$
+
 ## 程序入口
 
 - `tools/run_uma_campaign.py`：可恢复的多 worker 生成、弛豫、门控、凸包代理和增量选择。
@@ -72,14 +73,13 @@ $$
 - `tools/audit_uma_campaign.py`：对最终 CIF 进行独立验证。
 - `tools/audit_crossmetal_novelty.py`：2026 年 9 月 11 日执行的跨金属新颖性审计。
 
-`runs/` 是指向 9.10–9.11 不可变实验资产的符号链接，其中包含
+`runs/` 是指向不可变实验资产的符号链接，其中包含
 flow checkpoint、conditioning profile、参考标签、campaign 记录和已选结构。
 
-## 运行 campaign
+## 运行弛豫 (当前生成优化架构仍然与弛豫独立进行)
 
 ```bash
 tools/launch_uma_campaign.sh
 ```
 
 使用 `tools/launch_uma_campaign.sh --audit` 可重新验证 campaign 导出的 CIF。
-冻结协议和产物布局见 [UMACampaign24.md](docs/UMACampaign24.md)。
