@@ -1,8 +1,9 @@
-"""Generate fixed-condition Flow candidates with UMA-guided source optimization.
+"""Generate fixed-condition Flow candidates with surrogate-guided optimization.
 
-The optimizer changes only the random X/L source of a frozen geometry Flow.
-It never runs an ASE optimizer inside an inference step; complete UMA
-relaxation is a separate post-generation stage.
+The backend defaults to UMA but can be replaced through the surrogate registry
+or an external ``module:callable`` factory. The optimizer changes only the
+random X/L source of a frozen geometry Flow; complete physical relaxation is a
+separate post-generation stage.
 """
 from __future__ import annotations
 
@@ -15,11 +16,9 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
+from nagen.generation import optimize_source_with_surrogate, optimize_source_with_uma
 from nagen.inverse.generate import load_model
-from nagen.inverse.guidance import _source_prior, soft_constraint_terms
-from nagen.inverse.model import CrystalState
-from nagen.inverse.sample import decode_terminal, integrate_flow
-from nagen.inverse.uma_guidance import load_uma_calculator_vjp_factory
+from nagen.surrogate import SurrogateSpec, load_surrogate
 from nagen.inverse._io import json_default, sha256_file as sha256
 from nagen.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
@@ -60,58 +59,32 @@ def make_source(model, type_indices, seed: int, source_mode: str):
     return CrystalState(fixed_atom, frac, lattice), mask
 
 
-def optimize_source_with_uma(
-    model,
-    source,
-    mask,
-    energy_fn,
-    core_probabilities,
-    steps,
-    lr,
-    ode_steps,
-    fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
-):
-    """First-order D-Flow optimization with UMA VJP and smooth geometry terms."""
-    frac = source.frac.detach().clone().requires_grad_(True)
-    lattice = source.lattice.detach().clone().requires_grad_(True)
-    optimizer = torch.optim.Adam((frac, lattice), lr=lr)
-    history = []
-    for step in range(steps):
-        optimizer.zero_grad(set_to_none=True)
-        state = CrystalState(source.atom, frac, lattice)
-        terminal = integrate_flow(model, state, mask, steps=ode_steps, method="midpoint", freeze_atom=True)
-        _, final_frac, final_lattice = decode_terminal(model, terminal, mask)
-        energy = energy_fn(final_frac, final_lattice).mean()
-        soft = soft_constraint_terms(
-            model,
-            terminal,
-            mask,
-            probabilities_override=core_probabilities,
-            fe_coordination_options=fe_coordination_options,
-        )
-        prior = _source_prior(state, mask)
-        loss = (.10 * energy + 20.0 * soft["distance"] + 3.0 * soft["p_coordination"]
-                + 3.0 * soft["fe_coordination"] + 2.0 * soft["volume"] + .02 * prior)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_((frac, lattice), 5.0)
-        optimizer.step()
-        with torch.no_grad():
-            frac.remainder_(1.0)
-        history.append({"step": step + 1, "loss": float(loss.detach()),
-                        "uma_energy_eV_atom": float(energy.detach()),
-                        **{f"soft_{name}": float(value.detach()) for name, value in soft.items()},
-                        "source_prior": float(prior.detach())})
-    final_source = CrystalState(source.atom, frac.detach(), lattice.detach())
-    with torch.no_grad():
-        terminal = integrate_flow(model, final_source, mask, steps=ode_steps, method="midpoint", freeze_atom=True)
-        _, final_frac, final_lattice = decode_terminal(model, terminal, mask)
-    return final_source, final_frac, final_lattice, history
+def _surrogate_option(value: str):
+    key, separator, raw = value.partition("=")
+    if not separator or not key:
+        raise ValueError("surrogate option must use key=value")
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = raw
+    return key, parsed
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--flow", required=True); parser.add_argument("--condition", required=True)
-    parser.add_argument("--profile", required=True); parser.add_argument("--uma-checkpoint", required=True)
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--uma-checkpoint", help="Deprecated alias for --surrogate-checkpoint")
+    parser.add_argument("--surrogate", default="uma", help="Registered surrogate backend")
+    parser.add_argument("--surrogate-checkpoint")
+    parser.add_argument("--surrogate-factory", help="External surrogate factory: module:callable")
+    parser.add_argument(
+        "--surrogate-option",
+        action="append",
+        default=[],
+        type=_surrogate_option,
+        metavar="KEY=VALUE",
+    )
     parser.add_argument("--out", required=True); parser.add_argument("--count", type=int, default=128)
     parser.add_argument("--seed", type=int, default=271828); parser.add_argument("--ode-steps", type=int, default=48)
     parser.add_argument("--dflow-steps", type=int, default=12); parser.add_argument("--dflow-lr", type=float, default=.03)
@@ -126,6 +99,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.count < 1 or args.dflow_steps < 0 or args.ode_steps < 1:
         parser.error("invalid positive generation budget")
+    surrogate_checkpoint = args.surrogate_checkpoint or args.uma_checkpoint
+    if args.surrogate.lower() == "uma" and not surrogate_checkpoint:
+        parser.error("UMA surrogate requires --surrogate-checkpoint or --uma-checkpoint")
     out = Path(args.out); out.mkdir(parents=True, exist_ok=False)
     device = torch.device(args.device)
     model, checkpoint = load_model(args.flow, device, True)
@@ -142,15 +118,28 @@ def main() -> None:
     if any(int(index) > 4 for index in type_indices):
         raise ValueError("current phosphate D-Flow terms require core Na/Fe/P/O indices")
     core_probabilities = F.one_hot(type_indices[None] - 1, num_classes=4).to(device=device, dtype=torch.float32)
-    factory, uma_provenance = load_uma_calculator_vjp_factory(args.uma_checkpoint, args.device, args.task_name)
-    atomic_numbers = torch.tensor([{ "Na": 11, "Fe": 26, "P": 15, "O": 8 }[element] for element in elements], device=device)
-    energy_fn = factory(atomic_numbers)
+    surrogate = load_surrogate(
+        SurrogateSpec(
+            backend=args.surrogate,
+            checkpoint=surrogate_checkpoint,
+            device=args.device,
+            task_name=args.task_name,
+            options=dict(args.surrogate_option),
+            factory=args.surrogate_factory,
+        )
+    )
+    atomic_numbers = torch.tensor(
+        [{"Na": 11, "Fe": 26, "P": 15, "O": 8}[element] for element in elements],
+        device=device,
+    )
+    energy_fn = surrogate.guidance_energy(atomic_numbers)
+    surrogate_provenance = surrogate.provenance
     profile = json.loads(Path(args.profile).read_text()); counts = Counter(); records = []
     with (out / "generated_all.jsonl").open("x") as all_handle, (out / "generated_safe.jsonl").open("x") as safe_handle:
         for index in range(args.count):
             source_seed = args.seed + index
             source, mask = make_source(model, type_indices, source_seed, args.source_mode)
-            final_source, frac, lattice, history = optimize_source_with_uma(
+            final_source, frac, lattice, history = optimize_source_with_surrogate(
                 model,
                 source,
                 mask,
@@ -174,7 +163,13 @@ def main() -> None:
             )
             row = {"material_id": crystal.id, "A": elements, "X_frac": crystal.frac, "L_matrix": crystal.lattice,
                    "family": condition.family,
-                   "generation": {"method": "fixed_NA_geometry_flow_UMA_DFlow_source_optimization",
+                   "generation": {
+                     "method": (
+                         "fixed_NA_geometry_flow_UMA_DFlow_source_optimization"
+                         if args.surrogate.lower() == "uma"
+                         else f"fixed_NA_geometry_flow_{args.surrogate}_DFlow_source_optimization"
+                     ),
+                     "surrogate_backend": args.surrogate,
                      "source_seed": source_seed, "ode_steps": args.ode_steps, "dflow_steps": args.dflow_steps,
                      "dflow_lr": args.dflow_lr, "source_mode": args.source_mode,
                      "fe_coordination_options": list(args.fe_coordination),
@@ -192,7 +187,9 @@ def main() -> None:
                 "fe_coordination_options": list(args.fe_coordination),
                 "conditioning": {"N": len(elements), "counts": condition.counts, "family": condition.family},
                 "flow_sha256": sha256(args.flow), "flow_training": checkpoint.get("training_objective"),
-                "uma": uma_provenance, "profile_sha256": sha256(args.profile),
+                "surrogate": surrogate_provenance,
+                "uma": surrogate_provenance if args.surrogate.lower() == "uma" else None,
+                "profile_sha256": sha256(args.profile),
                 "note": "UMA enters only through first-order source-space guidance. Final UMA relaxation and all hard gates remain independent stages."}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, default=json_default) + "\n")
 

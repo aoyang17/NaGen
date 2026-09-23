@@ -146,6 +146,33 @@ class PackedCrystalDataset(Dataset):
             "N": stop - start,
         }
 
+    @property
+    def atom_counts(self) -> tuple[int, ...]:
+        offsets = self.data["offsets"]
+        return tuple(
+            int(offsets[index + 1] - offsets[index])
+            for index in self.indices
+        )
+
+    @property
+    def element_to_index(self) -> dict[str, int]:
+        return {
+            str(element): int(index)
+            for element, index in self.data["element_to_index"].items()
+        }
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "version": self.data.get("version"),
+            "source": self.data.get("source"),
+            "source_hash": self.data.get(
+                "source_first_1MiB_sha256", self.data.get("source_hashes")
+            ),
+            "filter_definition": self.data.get("filter_definition"),
+            "n_structures": len(self.indices),
+        }
+
 
 def collate_crystals(batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
     n_max = max(item["N"] for item in batch)

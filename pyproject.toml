@@ -21,6 +21,9 @@ dependencies = [
   "torch",
 ]
 
+[project.scripts]
+nagen-train-flow = "nagen.training.train_flow:main"
+
 [project.optional-dependencies]
 shooting = [
   "fairchem-core>=2.21,<2.22",
