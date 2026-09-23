@@ -1,9 +1,8 @@
-# NaGen
+# ShootingFlow CSP (Crystal Structure Prediction)
 
-NaGen generates constrained Na–Fe–P–O orthophosphate crystal candidates.
-This repository's production workflow is the UMA campaign that produced the
-September 10–11, 2026 candidate set. Earlier root-level implementations are
-preserved under `legacy/` and are not part of the active runtime path.
+ShootingFlow CSP enables high-precision, controllable crystal structure generation. It formulates geometric/property constraints on target crystals as an optimization problem and progressively propagates them into generative inference, yielding crystals that conform to both the data manifold (prior knowledge of target crystals) and high-dimensional constraints. Its core algorithm, ShootingFlow, casts flow-matching inference and optimization as a boundary value problem solved via the shooting method from optimal control theory.
+
+We take Na-Fe-P-O orthophosphate crystal generation mission as an example. The project comprises three modules: crystal representation, which parameterizes crystal encoding; generative architecture, which learns the mathematical manifold; and a surrogate model, which provides physical estimates. We describe these three components in turn.
 
 ## Crystal representation
 
@@ -16,21 +15,20 @@ I adopt the $(N, \mathbf{A}, \mathbf{X}, \mathbf{L})$ crystal representation str
 
 These four components together form the design variables of the generative optimization problem.
 
-## Production architecture
+## Generative architecture
 
-1. Fix the `Na6Fe6P8O32` composition and draw a polyhedral source state.
-2. Optimize source coordinates and lattice for 12 steps with UMA energy and
-   differentiable geometric constraints.
-3. Integrate the frozen geometry DFlow for 48 midpoint steps.
-4. Relax at fixed cell with UMA/FIRE, then validate promising candidates using
-   default UMA inference.
-5. Require exact coordination, geometry, force, finite same-UMA reference-hull,
-   framework novelty, cross-candidate uniqueness, and CIF round-trip checks.
+1. Fix the discrete composition first: N = 52, A = Na6Fe6P8O32; optimize only the Flow source variables z_X and z_L.
+2. Use a frozen geometry Flow and perform 12 source-space Adam steps, backpropagating through the full 48-step midpoint ODE at every step.
+3. Optimize a soft objective: UMA energy plus differentiable distance, P/Fe-coordination, volume, and source-prior penalties.
+4. Re-integrate the optimized source with no gradients to obtain the final generated structure.
+5. Apply a catastrophic precheck for non-finite cells, invalid density/conditioning, and severe atomic overlaps.
+6. Relax the surviving structure with fixed-cell UMA/FIRE, then evaluate exact hard gates: composition, charge, PBC distances, CN(P)=4, configurable CN(Fe) ⊆ {4,5,6}, polyhedron centers, Fe sharing, oxygen coverage, and force convergence.
+7. Require finite-reference E_hull^UMA ≤ 0.15 eV/atom; at fixed composition, minimizing UMA energy is equivalent to minimizing the active hull gap.
+8. Only after all hard gates pass, apply framework novelty and diversity checks with Na removed: no known Fe–P–O structure/topology match, sufficient descriptor distance, no cross-candidate duplicate, and successful CIF round-trip.
+9. Accept candidates incrementally as streaming outputs; novelty and hull stability are final gating/selection criteria, not terms in the source-space generation loss.
 
-The finite reference hull is a same-UMA proxy, not a complete DFT phase diagram.
 
-
-# ShootingFlow · Optimization problem formulation | Take Na-Fe-P-O generation for example
+### ShootingFlow · Optimization problem formulation | Take Na-Fe-P-O generation for example
 
 | Type | Item | Requirement / Definition | Current Result / Notes |
 |---|---|---|---|
@@ -54,6 +52,16 @@ The finite reference hull is a same-UMA proxy, not a complete DFT phase diagram.
 | ![Constraint](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | UMA $E_{\mathrm{hull}}$ | $E_{\mathrm{hull}}^{\mathrm{UMA}} \le 150$ meV/atom | ✓ 100.00–146.21 meV/atom |
 | ![Constraint](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Atomic force convergence | $F_{\max} \le 0.03$ eV Å$^{-1}$ | ✓ 0.01874–0.02996 eV Å$^{-1}$ |
 
+## Surrogate model
+
+In this study, we employ [UMA](https://arxiv.org/abs/2506.23971) as a force-field surrogate model to provide the partial derivatives of the energy above the convex hull, $E_{\mathrm{hull}}$, and the force, $F$, with respect to the atomic coordinates $X$ and lattice parameters $L$:
+
+$$
+\frac{\partial E_{\mathrm{hull}}}{\partial X},\quad
+\frac{\partial E_{\mathrm{hull}}}{\partial L},\quad
+\frac{\partial F}{\partial X},\quad
+\frac{\partial F}{\partial L}.
+$$
 ## Entrypoints
 
 - `tools/run_uma_campaign.py`: resumable multi-worker generation, relaxation,
