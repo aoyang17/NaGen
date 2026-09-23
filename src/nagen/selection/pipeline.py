@@ -14,6 +14,11 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from scipy.stats import rankdata
 
+from nagen.inverse.spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    normalize_fe_coordination_options,
+)
+
 
 @dataclass
 class Crystal:
@@ -146,7 +151,8 @@ def calibrate(training, min_structures=20, cutoffs=None):
 
 
 def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
-               external_filter=None, fe_valences=(2, 3), motif_backend="external"):
+               external_filter=None, fe_valences=(2, 3), motif_backend="external",
+               fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS):
     """Final force = max atom Euclidean force norm, in eV/A; unknown fails.
 
     external_filter(crystal) must return {'passed': bool, 'details': ...}.
@@ -156,6 +162,9 @@ def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
         raise ValueError("force_threshold must be positive")
     if motif_backend not in {"external", "native"}:
         raise ValueError("unknown motif backend")
+    allowed_fe_coordination = normalize_fe_coordination_options(
+        fe_coordination_options
+    )
     frac, cell = np.asarray(crystal.frac), np.asarray(crystal.lattice)
     finite = (frac.shape == (len(crystal.elements), 3) and cell.shape == (3, 3)
               and np.isfinite(frac).all() and np.isfinite(cell).all())
@@ -194,8 +203,13 @@ def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
             supported = (ref.get("structures", 0) >= profile["min_structures"]
                          and "bond_min" in ref)
             row["supported"] = supported
+            row["allowed_coordination"] = bool(
+                row["element"] != "Fe"
+                or row["cn"] in allowed_fe_coordination
+            )
             row["passed"] = bool(supported and row["inside"]
                 and (row["element"] != "P" or row["cn"] == 4)
+                and row["allowed_coordination"]
                 and row["bond_min"] >= ref["bond_min"]
                 and row["bond_max"] <= ref["bond_max"])
             if supported and len(row["angles"]) == len(ref["angle_reference"]):
@@ -227,6 +241,7 @@ def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
             metrics[f"{element}_coordination_rarity"] = 1 - min(frequencies)
     return {"id": crystal.id, "passed": all(checks.values()), "checks": checks,
             "motif_backend": motif_backend,
+            "allowed_fe_coordination": list(allowed_fe_coordination),
             "charge_model": {"Na": 1, "P": 5, "O": -2, "Fe": list(fe_valences),
                              "required_Fe_average": required / counts["Fe"] if counts["Fe"] else None},
             "force_max_eV_A": fmax, "sites": rows, "overlaps": violations,

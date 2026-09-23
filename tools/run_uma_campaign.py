@@ -25,6 +25,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from nagen.selection.audit import load_crystals
 from nagen.inverse._io import json_default, sha256_file as sha256
+from nagen.inverse.spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    parse_fe_coordination_options,
+)
 from nagen.selection.hull import ReferenceHull
 from nagen.selection.pipeline import Crystal, Conditioning, hard_gates
 
@@ -65,7 +69,14 @@ def load_hull(model_hash):
     return ReferenceHull(rows, model_hash)
 
 
-def relax(evaluator, raw, condition, profile, steps=400):
+def relax(
+    evaluator,
+    raw,
+    condition,
+    profile,
+    steps=400,
+    fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
+):
     from ase import Atoms
     from ase.optimize import FIRE
     atoms = Atoms(symbols=raw.elements, scaled_positions=raw.frac, cell=raw.lattice, pbc=True)
@@ -78,13 +89,29 @@ def relax(evaluator, raw, condition, profile, steps=400):
     # the calculator cache by a mathematically equivalent periodic translation.
     final = Crystal(raw.id, raw.elements, atoms.get_scaled_positions(),
                     np.asarray(atoms.cell), raw.family)
-    gates = hard_gates(final, condition, profile, forces=after["forces_eV_A"],
-                       force_threshold=.03, motif_backend="native")
+    gates = hard_gates(
+        final,
+        condition,
+        profile,
+        forces=after["forces_eV_A"],
+        force_threshold=.03,
+        motif_backend="native",
+        fe_coordination_options=fe_coordination_options,
+    )
     return final, {"before": before, "after": after, "steps": optimizer.nsteps,
                    "converged": after["force_max_eV_A"] <= .03, "gates": gates}
 
 
-def finish_candidate(row, final, audit, condition, profile, hull, get_validation):
+def finish_candidate(
+    row,
+    final,
+    audit,
+    condition,
+    profile,
+    hull,
+    get_validation,
+    fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
+):
     """Common strict endpoint acceptance for scalar and batched proposals."""
     row.update(final=record(final), relaxation=audit)
     hr = hull.evaluate(final.elements, audit["after"]["energy_eV_atom"])
@@ -94,7 +121,14 @@ def finish_candidate(row, final, audit, condition, profile, hull, get_validation
     if geometry_ok and audit["after"]["force_max_eV_A"] <= .05 and eh is not None and eh <= .15:
         tick = time.monotonic()
         evaluator = get_validation()
-        final, audit = relax(evaluator, final, condition, profile, steps=1000)
+        final, audit = relax(
+            evaluator,
+            final,
+            condition,
+            profile,
+            steps=1000,
+            fe_coordination_options=fe_coordination_options,
+        )
         row.update(final=record(final), refinement=audit, validation_model=evaluator.provenance)
         row["timing"]["refinement_seconds"] = time.monotonic() - tick
         row["reference_hull"] = hull.evaluate(final.elements, audit["after"]["energy_eV_atom"])
@@ -108,6 +142,11 @@ def batch_worker(args, model, indices, probabilities, energy_fn, evaluator, hull
     from ase import Atoms
     from nagen.selection.batched_relax import fire_batch
     from generate_uma_guided_framework_candidates import make_source, optimize_source_with_uma, catastrophic_reason
+    fe_coordination_options = tuple(
+        config.get("protocol", {}).get(
+            "fe_coordination_options", DEFAULT_FE_COORDINATION_OPTIONS
+        )
+    )
     out = Path(args.out)
     index = args.worker
     while not (out / "STOP").exists():
@@ -127,13 +166,24 @@ def batch_worker(args, model, indices, probabilities, energy_fn, evaluator, hull
                    "generation_and_relaxation_inference": config["inference_settings"]}
             try:
                 source, mask = make_source(model, indices, seed, "polyhedral")
-                final_source, frac, cell, history = optimize_source_with_uma(model, source, mask, energy_fn, probabilities, 12, .03, 48)
+                final_source, frac, cell, history = optimize_source_with_uma(
+                    model,
+                    source,
+                    mask,
+                    energy_fn,
+                    probabilities,
+                    12,
+                    .03,
+                    48,
+                    fe_coordination_options=fe_coordination_options,
+                )
                 raw = Crystal(ident, [e for e in ("Na", "Fe", "P", "O") for _ in range(condition.counts.get(e, 0))],
                               frac[0].cpu().numpy(), cell[0].cpu().numpy(), condition.family)
                 row.update(raw=record(raw), generation={"method": "fixed_NA_geometry_flow_UMA_DFlow_source_optimization",
                     "source_seed": seed, "dflow_steps": 12, "dflow_lr": .03, "ode_steps": 48,
                     "source_mode": "polyhedral", "generated_variables": "all Na/Fe/P/O coordinates and lattice",
                     "copied_parent_coordinates": False, "optimization_history": history,
+                    "fe_coordination_options": list(fe_coordination_options),
                     "source_final_frac": final_source.frac.cpu().numpy(), "source_final_lattice": final_source.lattice.cpu().numpy()})
                 row["timing"]["generation_seconds"] = time.monotonic() - started
                 reason = catastrophic_reason(raw)
@@ -163,7 +213,15 @@ def batch_worker(args, model, indices, probabilities, energy_fn, evaluator, hull
         for (path, row, raw), a, audit in zip(pending, atoms, audits):
             try:
                 final = Crystal(raw.id, raw.elements, a.get_scaled_positions(), np.asarray(a.cell), raw.family)
-                audit["gates"] = hard_gates(final, condition, profile, forces=audit["after"]["forces_eV_A"], force_threshold=.03, motif_backend="native")
+                audit["gates"] = hard_gates(
+                    final,
+                    condition,
+                    profile,
+                    forces=audit["after"]["forces_eV_A"],
+                    force_threshold=.03,
+                    motif_backend="native",
+                    fe_coordination_options=fe_coordination_options,
+                )
                 row["timing"].update(relaxation_seconds=elapsed / len(pending), batch_relaxation_seconds=elapsed, batch_size=len(pending))
                 finish_candidate(row, final, audit, condition, profile, hull, get_validation)
                 row["timing"]["total_seconds"] = row["timing"]["generation_seconds"] + elapsed / len(pending) + row["timing"].get("refinement_seconds", 0.)
@@ -188,6 +246,11 @@ def worker(args):
     out = Path(args.out)
     files = inputs()
     config = json.loads((out / "configuration.json").read_text())
+    fe_coordination_options = tuple(
+        config.get("protocol", {}).get(
+            "fe_coordination_options", DEFAULT_FE_COORDINATION_OPTIONS
+        )
+    )
     profile = json.loads(files["profile"].read_text())
     condition = Conditioning(**json.loads(files["condition"].read_text()))
     model, checkpoint = load_model(str(files["flow"]), torch.device("cuda"), True)
@@ -232,12 +295,22 @@ def worker(args):
         try:
             source, mask = make_source(model, indices, seed, "polyhedral")
             final_source, frac, cell, history = optimize_source_with_uma(
-                model, source, mask, energy_fn, probabilities, 12, .03, 48)
+                model,
+                source,
+                mask,
+                energy_fn,
+                probabilities,
+                12,
+                .03,
+                48,
+                fe_coordination_options=fe_coordination_options,
+            )
             raw = Crystal(ident, elements, frac[0].cpu().numpy(), cell[0].cpu().numpy(), condition.family)
             row.update(raw=record(raw), generation={"method": "fixed_NA_geometry_flow_UMA_DFlow_source_optimization",
                 "source_seed": seed, "dflow_steps": 12, "dflow_lr": .03, "ode_steps": 48,
                 "source_mode": "polyhedral", "generated_variables": "all Na/Fe/P/O coordinates and lattice",
                 "copied_parent_coordinates": False, "optimization_history": history,
+                "fe_coordination_options": list(fe_coordination_options),
                 "source_final_frac": final_source.frac.cpu().numpy(),
                 "source_final_lattice": final_source.lattice.cpu().numpy()})
             row["timing"]["generation_seconds"] = time.monotonic() - started
@@ -246,9 +319,24 @@ def worker(args):
                 row.update(status="unsafe", reason=reason)
             else:
                 tick = time.monotonic()
-                final, audit = relax(evaluator, raw, condition, profile)
+                final, audit = relax(
+                    evaluator,
+                    raw,
+                    condition,
+                    profile,
+                    fe_coordination_options=fe_coordination_options,
+                )
                 row["timing"]["relaxation_seconds"] = time.monotonic() - tick
-                finish_candidate(row, final, audit, condition, profile, hull, get_validation)
+                finish_candidate(
+                    row,
+                    final,
+                    audit,
+                    condition,
+                    profile,
+                    hull,
+                    get_validation,
+                    fe_coordination_options=fe_coordination_options,
+                )
         except Exception as error:
             row.update(status="failed", error=f"{type(error).__name__}: {error}", traceback=traceback.format_exc())
         row["timing"]["total_seconds"] = time.monotonic() - started
@@ -273,7 +361,13 @@ class Collector:
         condition = Conditioning(**json.loads(inputs()["condition"].read_text()))
         self.condition = condition
         self.profile = json.loads(inputs()["profile"].read_text())
-        self.hull = load_hull(json.loads((self.out / "configuration.json").read_text())["hashes"]["uma"])
+        config = json.loads((self.out / "configuration.json").read_text())
+        self.fe_coordination_options = tuple(
+            config.get("protocol", {}).get(
+                "fe_coordination_options", DEFAULT_FE_COORDINATION_OPTIONS
+            )
+        )
+        self.hull = load_hull(config["hashes"]["uma"])
         target = Counter({e: n for e, n in condition.counts.items() if e != "Na"})
         known = [c for split in ("train", "val", "test") for c in load_crystals(inputs()["known"] / f"{split}.jsonl")]
         self.refs = [self.strip(c) for c in known if Counter(e for e in c.elements if e != "Na") == target]
@@ -312,8 +406,15 @@ class Collector:
         label = row.get("refinement", row.get("relaxation", {})).get("after")
         if label is None:
             raise ValueError("final forces and energy are required for independent collection audit")
-        gates = hard_gates(final, self.condition, self.profile, forces=label["forces_eV_A"],
-                           force_threshold=.03, motif_backend="native")
+        gates = hard_gates(
+            final,
+            self.condition,
+            self.profile,
+            forces=label["forces_eV_A"],
+            force_threshold=.03,
+            motif_backend="native",
+            fe_coordination_options=self.fe_coordination_options,
+        )
         hr = self.hull.evaluate(final.elements, label["energy_eV_atom"])
         eh = hr.get("e_above_reference_hull_eV_atom")
         if not gates["passed"] or eh is None or eh > .15:
@@ -382,6 +483,16 @@ def coordinator(args):
         config = json.loads(config_path.read_text())
         if (config["seed"], config["workers"], config["target"]) != (args.seed, args.workers, args.target):
             raise ValueError("resume requires identical seed, workers, and target")
+        stored_fe_coordination = tuple(
+            config.get("protocol", {}).get(
+                "fe_coordination_options", DEFAULT_FE_COORDINATION_OPTIONS
+            )
+        )
+        if stored_fe_coordination != args.fe_coordination:
+            raise ValueError(
+                "resume requires identical Fe coordination options: "
+                f"{stored_fe_coordination} != {args.fe_coordination}"
+            )
     else:
         config = {"seed": args.seed, "workers": args.workers, "target": args.target,
                   "python": sys.executable, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -389,7 +500,8 @@ def coordinator(args):
                   "known_hashes": {s: sha256(files["known"] / f"{s}.jsonl") for s in ("train", "val", "test")},
                   "protocol": {"dflow_steps": 12, "ode_steps": 48, "dflow_lr": .03, "fmax": .03,
                                "relax_steps": 400, "refine_steps": 1000, "hull_threshold": .15,
-                               "duplicate_threshold": 1e-4, "task_name": "omat", "fixed_cell": True}}
+                               "duplicate_threshold": 1e-4, "task_name": "omat", "fixed_cell": True,
+                               "fe_coordination_options": list(args.fe_coordination)}}
         write_json(config_path, config)
     for k, path in files.items():
         if k != "known" and sha256(path) != config["hashes"][k]:
@@ -417,8 +529,10 @@ def coordinator(args):
     config["relax_batch_size"] = args.relax_batch_size
     config["source_sha256"] = {str(path.relative_to(ROOT)): sha256(path) for path in (
         Path(__file__).resolve(), ROOT / "tools/generate_uma_guided_framework_candidates.py",
-        ROOT / "src/nagen/inverse/uma_guidance.py", ROOT / "src/nagen/selection/uma.py",
-        ROOT / "src/nagen/selection/pipeline.py", ROOT / "src/nagen/selection/hull.py",
+        ROOT / "src/nagen/inverse/uma_guidance.py", ROOT / "src/nagen/inverse/guidance.py",
+        ROOT / "src/nagen/inverse/constraints.py", ROOT / "src/nagen/inverse/spec.py",
+        ROOT / "src/nagen/selection/uma.py", ROOT / "src/nagen/selection/pipeline.py",
+        ROOT / "src/nagen/selection/hull.py",
         ROOT / "src/nagen/selection/batched_relax.py",
         ROOT / "src/nagen/selection/diversity.py", ROOT / "tools/select_framework_candidates.py")}
     write_json(config_path, config)
@@ -499,6 +613,12 @@ def main():
     p.add_argument("--threads", type=int, default=2)
     p.add_argument("--max-samples", type=int, default=0)
     p.add_argument("--inference-settings", choices=("default", "fixed_composition_fp32", "fixed_composition_fp32_compiled", "batch_fp32", "batch_tf32"), default="default")
+    p.add_argument(
+        "--fe-coordination",
+        type=parse_fe_coordination_options,
+        default=DEFAULT_FE_COORDINATION_OPTIONS,
+        help="Allowed Fe-O coordination numbers, e.g. 4, 4,5, or 4,5,6.",
+    )
     p.add_argument("--relax-batch-size", type=int, default=1)
     args = p.parse_args()
     if args.target < 1 or args.workers < 1 or args.threads < 1 or not 0 <= args.worker < args.workers or args.max_samples < 0 or args.relax_batch_size < 1:

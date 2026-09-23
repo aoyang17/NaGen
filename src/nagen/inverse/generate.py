@@ -17,7 +17,12 @@ from .guidance import optimize_source, optimize_terminal
 from .model import CrystalState, CrystalVectorField
 from .novelty import NoveltyIndex, crystal_descriptor
 from .sample import decode_terminal, integrate_flow
-from .spec import DEFAULT_SPEC
+from .spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    DEFAULT_SPEC,
+    OptimizationSpec,
+    parse_fe_coordination_options,
+)
 
 
 def load_model(path: str, device: torch.device, use_ema: bool = True):
@@ -183,6 +188,7 @@ def generate_batch(
     composition_pool_factor: int = 6,
     composition_max_rounds: int = 20,
     max_atoms: int | None = None,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     device = next(model.parameters()).device
     generator = torch.Generator(device=device).manual_seed(seed)
@@ -247,6 +253,7 @@ def generate_batch(
             ode_steps=ode_steps,
             integrator=integrator,
             freeze_atom=freeze_atom,
+            fe_coordination_options=fe_coordination_options,
         )
     else:
         with torch.no_grad():
@@ -265,6 +272,7 @@ def generate_batch(
             mask,
             optimization_steps=terminal_steps,
             learning_rate=terminal_lr,
+            fe_coordination_options=fe_coordination_options,
         )
     with torch.no_grad():
         types, frac, lattice = decode_terminal(active_model, terminal, mask)
@@ -281,6 +289,7 @@ def generate_conditioned_geometry_batch(
     terminal_lr: float = 0.02,
     source_mode: str = "uniform",
     end_time: float = 1.0,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Sample X,L from p(X,L|N,A) for previously DFlow-generated N,A.
 
@@ -344,6 +353,7 @@ def generate_conditioned_geometry_batch(
             mask,
             optimization_steps=terminal_steps,
             learning_rate=terminal_lr,
+            fe_coordination_options=fe_coordination_options,
         )
     with torch.no_grad():
         types, frac, lattice = decode_terminal(
@@ -369,6 +379,7 @@ def export_samples(
     composition_filter: bool = False,
     composition_pool_factor: int = 6,
     max_atoms: int | None = None,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> list[dict[str, Any]]:
     types, frac, lattice, mask = generate_batch(
         model,
@@ -385,6 +396,7 @@ def export_samples(
         composition_filter,
         composition_pool_factor,
         max_atoms=max_atoms,
+        fe_coordination_options=fe_coordination_options,
     )
     descriptor = crystal_descriptor(types, frac, lattice, mask, novelty.config)
     novelty_score, nearest_index = novelty.score(descriptor)
@@ -403,7 +415,13 @@ def export_samples(
         coordinates = frac[row, :n_atoms].detach().cpu().numpy()
         cell = lattice[row].detach().cpu().numpy()
         structure = Structure(cell, elements, coordinates, coords_are_cartesian=False)
-        feasibility = evaluate_feasibility(elements, coordinates, cell, None)
+        feasibility = evaluate_feasibility(
+            elements,
+            coordinates,
+            cell,
+            None,
+            spec=OptimizationSpec(fe_coordination_options=fe_coordination_options),
+        )
         nearest = int(nearest_index[row])
         record = {
             "candidate_id": f"NaGen-flow-{seed}-{row:05d}",
@@ -433,6 +451,7 @@ def export_samples(
                 "composition_exact_filter": composition_filter,
                 "composition_pool_factor": composition_pool_factor,
                 "inference_max_atoms": max_atoms,
+                "fe_coordination_options": list(fe_coordination_options),
             },
         }
         records.append(record)
@@ -461,6 +480,12 @@ def main() -> None:
     parser.add_argument("--terminal-lr", type=float, default=0.025)
     parser.add_argument("--composition-filter", action="store_true")
     parser.add_argument("--composition-pool-factor", type=int, default=6)
+    parser.add_argument(
+        "--fe-coordination",
+        type=parse_fe_coordination_options,
+        default=DEFAULT_FE_COORDINATION_OPTIONS,
+        help="Allowed Fe-O coordination numbers, e.g. 4, 4,5, or 4,5,6.",
+    )
     parser.add_argument("--max-atoms", type=int)
     args = parser.parse_args()
     device = torch.device(args.device)
@@ -488,6 +513,7 @@ def main() -> None:
         args.composition_filter,
         args.composition_pool_factor,
         args.max_atoms,
+        fe_coordination_options=args.fe_coordination,
     )
     print(
         json.dumps(

@@ -7,6 +7,53 @@ new Na--Fe--P--O experiment.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Iterable
+
+
+FE_COORDINATION_CHOICES = (4, 5, 6)
+DEFAULT_FE_COORDINATION_OPTIONS = FE_COORDINATION_CHOICES
+
+
+def normalize_fe_coordination_options(options: Iterable[int] | int) -> tuple[int, ...]:
+    """Return a sorted, non-empty subset of the supported Fe CN choices."""
+    if isinstance(options, int) and not isinstance(options, bool):
+        values = [options]
+    else:
+        try:
+            values = list(options)
+        except TypeError as error:
+            raise ValueError("Fe coordination options must be an iterable of integers") from error
+    if not values:
+        raise ValueError("at least one Fe coordination option is required")
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in values):
+        raise ValueError("Fe coordination options must be integers")
+    normalized = tuple(sorted(set(values)))
+    unknown = sorted(set(normalized) - set(FE_COORDINATION_CHOICES))
+    if unknown:
+        raise ValueError(
+            f"unsupported Fe coordination options {unknown}; "
+            f"choose from {FE_COORDINATION_CHOICES}"
+        )
+    return normalized
+
+
+def parse_fe_coordination_options(value: str | Iterable[int] | int) -> tuple[int, ...]:
+    """Parse ``4,5`` / ``4 5`` CLI input or normalize an iterable."""
+    if not isinstance(value, str):
+        return normalize_fe_coordination_options(value)
+    text = value.strip().replace(";", ",").replace(" ", ",")
+    if not text:
+        raise ValueError("Fe coordination options cannot be empty")
+    parts = [part for part in text.split(",") if part]
+    try:
+        parsed = [int(part) for part in parts]
+    except ValueError as error:
+        raise ValueError(f"invalid Fe coordination option list: {value!r}") from error
+    return normalize_fe_coordination_options(parsed)
+
+
+def format_fe_coordination_options(options: Iterable[int]) -> str:
+    return ",".join(str(value) for value in normalize_fe_coordination_options(options))
 
 
 @dataclass(frozen=True)
@@ -36,6 +83,14 @@ class OptimizationSpec:
     capacity_min_mAh_g: float = 130.0
     hull_max_eV_atom: float = 0.150
     faraday_C_mol: float = 96485.33212
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "fe_coordination_options",
+            normalize_fe_coordination_options(self.fe_coordination_options),
+        )
 
     @property
     def element_to_index(self) -> dict[str, int]:

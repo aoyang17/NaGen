@@ -96,6 +96,23 @@ style of extra strict FIRE refinement, capped at 1,000 steps. Acceptance always
 requires residual force <=0.03 and reference hull <=0.15 after refinement.
 No threshold is relaxed to meet the count.
 
+The allowed Fe-O coordination set is configurable and must be any non-empty
+subset of `{4,5,6}`. It is recorded in `configuration.json` under
+`protocol.fe_coordination_options`, enforced as a differentiable penalty during
+source optimization, and enforced again by the final hard gates. For example:
+
+```bash
+FE_COORDINATION=4,5 bash tools/launch_uma_campaign.sh
+```
+
+or directly:
+
+```bash
+tools/run_uma_campaign.py run --out runs/campaign_custom   --fe-coordination 4,5
+```
+
+The default is `4,5,6`, preserving the original campaign protocol.
+
 For batch records, `timing.relaxation_seconds` is the batch wall time divided
 by the number of structures. `batch_relaxation_seconds` and `batch_size` retain
 the measured batch time and denominator. These are amortized compute times,

@@ -21,6 +21,10 @@ from nagen.inverse.model import CrystalState
 from nagen.inverse.sample import decode_terminal, integrate_flow
 from nagen.inverse.uma_guidance import load_uma_calculator_vjp_factory
 from nagen.inverse._io import json_default, sha256_file as sha256
+from nagen.inverse.spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    parse_fe_coordination_options,
+)
 from nagen.selection.pipeline import Crystal, Conditioning, hard_gates, neighbors
 
 
@@ -56,7 +60,17 @@ def make_source(model, type_indices, seed: int, source_mode: str):
     return CrystalState(fixed_atom, frac, lattice), mask
 
 
-def optimize_source_with_uma(model, source, mask, energy_fn, core_probabilities, steps, lr, ode_steps):
+def optimize_source_with_uma(
+    model,
+    source,
+    mask,
+    energy_fn,
+    core_probabilities,
+    steps,
+    lr,
+    ode_steps,
+    fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
+):
     """First-order D-Flow optimization with UMA VJP and smooth geometry terms."""
     frac = source.frac.detach().clone().requires_grad_(True)
     lattice = source.lattice.detach().clone().requires_grad_(True)
@@ -68,7 +82,13 @@ def optimize_source_with_uma(model, source, mask, energy_fn, core_probabilities,
         terminal = integrate_flow(model, state, mask, steps=ode_steps, method="midpoint", freeze_atom=True)
         _, final_frac, final_lattice = decode_terminal(model, terminal, mask)
         energy = energy_fn(final_frac, final_lattice).mean()
-        soft = soft_constraint_terms(model, terminal, mask, probabilities_override=core_probabilities)
+        soft = soft_constraint_terms(
+            model,
+            terminal,
+            mask,
+            probabilities_override=core_probabilities,
+            fe_coordination_options=fe_coordination_options,
+        )
         prior = _source_prior(state, mask)
         loss = (.10 * energy + 20.0 * soft["distance"] + 3.0 * soft["p_coordination"]
                 + 3.0 * soft["fe_coordination"] + 2.0 * soft["volume"] + .02 * prior)
@@ -96,6 +116,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=271828); parser.add_argument("--ode-steps", type=int, default=48)
     parser.add_argument("--dflow-steps", type=int, default=12); parser.add_argument("--dflow-lr", type=float, default=.03)
     parser.add_argument("--source-mode", choices=("uniform", "polyhedral"), default="polyhedral")
+    parser.add_argument(
+        "--fe-coordination",
+        type=parse_fe_coordination_options,
+        default=DEFAULT_FE_COORDINATION_OPTIONS,
+        help="Allowed Fe-O coordination numbers, e.g. 4, 4,5, or 4,5,6.",
+    )
     parser.add_argument("--task-name", default="omat"); parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
     if args.count < 1 or args.dflow_steps < 0 or args.ode_steps < 1:
@@ -125,17 +151,33 @@ def main() -> None:
             source_seed = args.seed + index
             source, mask = make_source(model, type_indices, source_seed, args.source_mode)
             final_source, frac, lattice, history = optimize_source_with_uma(
-                model, source, mask, energy_fn, core_probabilities, args.dflow_steps, args.dflow_lr, args.ode_steps
+                model,
+                source,
+                mask,
+                energy_fn,
+                core_probabilities,
+                args.dflow_steps,
+                args.dflow_lr,
+                args.ode_steps,
+                fe_coordination_options=args.fe_coordination,
             )
             crystal = Crystal(f"uma_dflow_seed{args.seed}_{index:04d}", elements,
                               frac[0].detach().cpu().numpy(), lattice[0].detach().cpu().numpy(), condition.family)
             reason = catastrophic_reason(crystal)
-            gates = hard_gates(crystal, condition, profile, forces=None, motif_backend="native")
+            gates = hard_gates(
+                crystal,
+                condition,
+                profile,
+                forces=None,
+                motif_backend="native",
+                fe_coordination_options=args.fe_coordination,
+            )
             row = {"material_id": crystal.id, "A": elements, "X_frac": crystal.frac, "L_matrix": crystal.lattice,
                    "family": condition.family,
                    "generation": {"method": "fixed_NA_geometry_flow_UMA_DFlow_source_optimization",
                      "source_seed": source_seed, "ode_steps": args.ode_steps, "dflow_steps": args.dflow_steps,
                      "dflow_lr": args.dflow_lr, "source_mode": args.source_mode,
+                     "fe_coordination_options": list(args.fe_coordination),
                      "generated_variables": "all Na/Fe/P/O coordinates and lattice", "copied_parent_coordinates": False,
                      "source_final_frac": final_source.frac.cpu().numpy(), "source_final_lattice": final_source.lattice.cpu().numpy(),
                      "optimization_history": history},
@@ -147,6 +189,7 @@ def main() -> None:
             else: counts[reason] += 1
             print(json.dumps({"generated": index + 1, "counts": counts}), flush=True)
     manifest = {"status": "completed", "configuration": vars(args), "counts": counts,
+                "fe_coordination_options": list(args.fe_coordination),
                 "conditioning": {"N": len(elements), "counts": condition.counts, "family": condition.family},
                 "flow_sha256": sha256(args.flow), "flow_training": checkpoint.get("training_objective"),
                 "uma": uma_provenance, "profile_sha256": sha256(args.profile),

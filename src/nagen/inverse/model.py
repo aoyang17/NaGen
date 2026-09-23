@@ -11,7 +11,11 @@ from torch import nn
 from torch.nn import functional as F
 
 from .lattice import decode_lattice, unstandardize_lattice
-from .spec import DEFAULT_SPEC
+from .spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    DEFAULT_SPEC,
+    normalize_fe_coordination_options,
+)
 
 
 class CrystalState(NamedTuple):
@@ -205,6 +209,7 @@ def flow_matching_loss(
     geometry_only: bool = False,
     geometry_validity_weight: float = 0.0,
     coupling: str = "noise",
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Joint rectified flow loss with a minimum-image torus path for X.
 
@@ -376,7 +381,9 @@ def flow_matching_loss(
                     count, DEFAULT_SPEC.pair_minima["Fe-O"],
                     DEFAULT_SPEC.fe_o_bond_cutoff,
                 )
-                for count in (4, 5, 6)
+                for count in normalize_fe_coordination_options(
+                    fe_coordination_options
+                )
             ],
             dim=0,
         ).amin(dim=0)

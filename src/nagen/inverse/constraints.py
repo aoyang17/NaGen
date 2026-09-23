@@ -132,12 +132,15 @@ def _coordination_checks(
         if element == "P":
             p_ok &= coordination == 4
         else:
-            fe_ok &= coordination in {4, 5, 6}
+            fe_ok &= coordination in spec.fe_coordination_options
         sites.append({"site": i, "element": element, "coordination": coordination})
     return {
         "p_coordination_eq_4": bool(p_ok),
-        "fe_coordination_in_4_5_6": bool(fe_ok),
-    }, {"sites": sites}
+        "fe_coordination_allowed": bool(fe_ok),
+    }, {
+        "sites": sites,
+        "allowed_fe_coordination": list(spec.fe_coordination_options),
+    }
 
 
 def evaluate_feasibility(

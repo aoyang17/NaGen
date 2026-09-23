@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 import torch
 
-from nagen.inverse.guidance import terminal_constraint_terms
+from nagen.inverse.guidance import _coordination_assignment, terminal_constraint_terms
 from nagen.inverse.model import (
     CrystalState, CrystalVectorField, FlowConfig, flow_matching_loss,
 )
@@ -51,6 +51,28 @@ class TerminalGuidanceTests(unittest.TestCase):
         terms["fe_coordination"].backward()
         self.assertTrue(torch.isfinite(frac.grad).all())
         self.assertTrue(torch.isfinite(lattice.grad).all())
+
+    def test_assignment_honors_custom_fe_coordination_subsets(self):
+        offsets = {element: index for index, element in enumerate(DEFAULT_SPEC.elements)}
+        types = torch.tensor([[offsets["Fe"]] + [offsets["O"]] * 6])
+        mask = torch.ones(1, 7, dtype=torch.bool)
+        distances = torch.ones(1, 7, 7) * 2.2
+        distances[0, 0, 1:5] = 2.0
+        distances[0, 0, 5] = 2.49
+        distances[0, 0, 6] = 10.0
+        for options, expected in (
+            ((4,), 4),
+            ((5,), 5),
+            ((4, 6), 4),
+            ((5, 6), 5),
+        ):
+            assignment = _coordination_assignment(
+                types,
+                mask,
+                distances,
+                fe_coordination_options=options,
+            )
+            self.assertEqual(int(assignment[0, 0].sum()), expected)
 
     def test_geometry_validity_auxiliary_has_finite_gradient(self):
         torch.manual_seed(11)

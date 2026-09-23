@@ -15,6 +15,7 @@ from pymatgen.core import Structure
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from nagen.inverse._io import sha256_file as sha256
+from nagen.inverse.spec import DEFAULT_FE_COORDINATION_OPTIONS
 from nagen.selection.pipeline import Crystal, Conditioning, hard_gates, robust_rank, diversity_select
 from nagen.selection.uma import UMAEvaluator
 from nagen.selection.diversity import distances
@@ -27,6 +28,11 @@ def main():
     args = parser.parse_args()
     out = Path(args.run).resolve()
     config = json.loads((out / "configuration.json").read_text())
+    fe_coordination_options = tuple(
+        config.get("protocol", {}).get(
+            "fe_coordination_options", DEFAULT_FE_COORDINATION_OPTIONS
+        )
+    )
     for name in ("flow", "profile", "condition", "references"):
         assert sha256(inputs()[name]) == config["hashes"][name], f"changed input: {name}"
     for split, digest in config["known_hashes"].items():
@@ -44,7 +50,15 @@ def main():
         loaded = Structure.from_file(path)
         c = Crystal(entry["id"], [str(s.specie) for s in loaded], np.asarray(loaded.frac_coords), np.asarray(loaded.lattice.matrix))
         label = evaluator.evaluate(c.elements, c.frac, c.lattice)
-        gates = hard_gates(c, condition, profile, forces=label["forces_eV_A"], force_threshold=.03, motif_backend="native")
+        gates = hard_gates(
+            c,
+            condition,
+            profile,
+            forces=label["forces_eV_A"],
+            force_threshold=.03,
+            motif_backend="native",
+            fe_coordination_options=fe_coordination_options,
+        )
         hr = hull.evaluate(c.elements, label["energy_eV_atom"])
         eh = hr.get("e_above_reference_hull_eV_atom")
         stripped = collector.strip(c)
@@ -58,6 +72,7 @@ def main():
         features.append(feature)
         row = {"id": c.id, "file": str(path), "sha256": sha256(path), "labels": label,
                "hard_gates": gates, "reference_hull": hr,
+               "fe_coordination_options": list(fe_coordination_options),
                "framework_novelty": {"known_structure_match": known_match, "known_topology_match": topology_match,
                                      "nearest_known_distance": nearest, "known_reference_count": len(collector.refs)},
                "passed": gates["passed"] and eh is not None and eh <= .15 and sha256(path) == entry["sha256"]

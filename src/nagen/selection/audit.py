@@ -7,6 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
+from nagen.inverse.spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    parse_fe_coordination_options,
+)
 from .pipeline import Crystal, Conditioning, calibrate, hard_gates
 
 
@@ -54,6 +58,12 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--min-structures", type=int, default=20)
     parser.add_argument("--fe-cutoff", type=float, default=2.5)
+    parser.add_argument(
+        "--fe-coordination",
+        type=parse_fe_coordination_options,
+        default=DEFAULT_FE_COORDINATION_OPTIONS,
+        help="Allowed Fe-O coordination numbers, e.g. 4, 4,5, or 4,5,6.",
+    )
     args = parser.parse_args()
     if args.min_structures < 1 or args.fe_cutoff <= 0:
         parser.error("positive calibration support and cutoff required")
@@ -69,8 +79,15 @@ def main():
     profile["source"] = str(Path(args.train).resolve())
     profile["split"] = args.split or "caller-declared training-only file"
     candidates = list(load_crystals(args.candidates)) if args.candidates else train
-    reports = [hard_gates(c, Conditioning(dict(Counter(c.elements)), c.family), profile)
-               for c in candidates]
+    reports = [
+        hard_gates(
+            c,
+            Conditioning(dict(Counter(c.elements)), c.family),
+            profile,
+            fe_coordination_options=args.fe_coordination,
+        )
+        for c in candidates
+    ]
     summary = {
         "status": "geometry_audit_only_no_UMA_no_external_filter",
         "training_count": len(train), "candidate_count": len(candidates),
@@ -80,6 +97,7 @@ def main():
         "passed_counts": {name: sum(r["checks"][name] for r in reports)
                           for name in reports[0]["checks"]} if reports else {},
         "final_passed": sum(r["passed"] for r in reports),
+        "fe_coordination_options": list(args.fe_coordination),
         "profile": profile, "candidates": reports,
     }
     output = Path(args.out)

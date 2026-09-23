@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
+
 import numpy as np
 
 from nagen.inverse.constraints import composition_metrics, evaluate_feasibility, theoretical_capacity
-from nagen.inverse.spec import DEFAULT_SPEC
+from nagen.selection.pipeline import Crystal, Conditioning, hard_gates
+from nagen.inverse.spec import (
+    DEFAULT_SPEC,
+    OptimizationSpec,
+    parse_fe_coordination_options,
+)
 
 
 def formula(scale: int = 1) -> list[str]:
@@ -37,6 +44,67 @@ class ConstraintTests(unittest.TestCase):
         self.assertAlmostEqual(q1, q2, places=10)
         self.assertAlmostEqual(n2, 4 * n1)
         self.assertGreaterEqual(q1, 130.0)
+
+    def test_fe_coordination_options_accept_any_nonempty_subset(self) -> None:
+        self.assertEqual(parse_fe_coordination_options("4"), (4,))
+        self.assertEqual(parse_fe_coordination_options("6,4"), (4, 6))
+        self.assertEqual(parse_fe_coordination_options("4,5,6"), (4, 5, 6))
+        self.assertEqual(
+            OptimizationSpec(fe_coordination_options=(4, 6)).fe_coordination_options,
+            (4, 6),
+        )
+        for invalid in ("", "3", "4,x"):
+            with self.assertRaises(ValueError):
+                parse_fe_coordination_options(invalid)
+
+    def test_hard_gates_enforce_custom_fe_coordination_set(self) -> None:
+        elements = ["Na", "Fe", "P", "O", "O", "O", "O"]
+        crystal = Crystal(
+            "custom-cn",
+            elements,
+            np.arange(len(elements) * 3).reshape(-1, 3) / (len(elements) * 3),
+            np.eye(3) * 20.0,
+        )
+        profile = {
+            "min_structures": 1,
+            "training_ids": ["train-0"],
+            "cutoffs": {"P": 2.0, "Fe": 2.5},
+            "profiles": {
+                "phosphate:P:4": {
+                    "structures": 1, "bond_min": 1.4, "bond_max": 1.8,
+                    "angle_reference": [109.5] * 6,
+                },
+                "phosphate:Fe:6": {
+                    "structures": 1, "bond_min": 1.6, "bond_max": 2.4,
+                    "angle_reference": [90.0] * 15,
+                },
+            },
+        }
+        rows = [
+            {"site": 2, "element": "P", "cn": 4, "inside": True,
+             "oxygen_indices": [3, 4, 5, 6], "bond_min": 1.5, "bond_max": 1.6,
+             "off_center": 0.0, "bond_distortion": 0.0,
+             "angles": [109.5] * 6},
+            {"site": 1, "element": "Fe", "cn": 6, "inside": True,
+             "oxygen_indices": [3, 4, 5, 6], "bond_min": 1.8, "bond_max": 2.2,
+             "off_center": 0.0, "bond_distortion": 0.0,
+             "angles": [90.0] * 15},
+        ]
+        condition = Conditioning({"Na": 1, "Fe": 1, "P": 1, "O": 4})
+        forces = np.zeros((len(elements), 3))
+        with patch("nagen.selection.pipeline.neighbors", return_value=[]), \
+             patch("nagen.selection.pipeline.motifs", return_value=rows):
+            allowed = hard_gates(
+                crystal, condition, profile, forces=forces,
+                motif_backend="native", fe_coordination_options=(4, 5, 6),
+            )
+            disallowed = hard_gates(
+                crystal, condition, profile, forces=forces,
+                motif_backend="native", fe_coordination_options=(4, 5),
+            )
+        self.assertTrue(allowed["passed"])
+        self.assertFalse(disallowed["passed"])
+        self.assertFalse(disallowed["sites"][1]["allowed_coordination"])
 
     def test_missing_hull_never_passes_final_feasibility(self) -> None:
         elements = formula(4)

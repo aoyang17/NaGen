@@ -13,7 +13,11 @@ from .constraints import minimum_distance
 from .lattice import decode_lattice, unstandardize_lattice
 from .model import CrystalState, CrystalVectorField
 from .sample import integrate_flow
-from .spec import DEFAULT_SPEC
+from .spec import (
+    DEFAULT_FE_COORDINATION_OPTIONS,
+    DEFAULT_SPEC,
+    normalize_fe_coordination_options,
+)
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,7 @@ def soft_constraint_terms(
     temperature: float = 0.35,
     bond_temperature_A: float = 0.10,
     probabilities_override: torch.Tensor | None = None,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> dict[str, torch.Tensor]:
     """Smooth penalties corresponding to the exact post-generation checks."""
     dtype = terminal.atom.dtype
@@ -111,9 +116,14 @@ def soft_constraint_terms(
     p_coordination_loss = (
         p_probability * (p_coordination - 4.0).square()
     ).sum() / p_probability.sum().clamp_min(1.0)
-    fe_interval_violation = F.relu(4.0 - fe_coordination).square() + F.relu(
-        fe_coordination - 6.0
-    ).square()
+    allowed_fe_counts = torch.tensor(
+        normalize_fe_coordination_options(fe_coordination_options),
+        dtype=dtype,
+        device=mask.device,
+    )
+    fe_interval_violation = (
+        fe_coordination.unsqueeze(0) - allowed_fe_counts[:, None, None]
+    ).square().amin(dim=0)
     fe_coordination_loss = (
         fe_probability * fe_interval_violation
     ).sum() / fe_probability.sum().clamp_min(1.0)
@@ -170,17 +180,19 @@ def _coordination_assignment(
     type_index: torch.Tensor,
     mask: torch.Tensor,
     distances: torch.Tensor,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> torch.Tensor:
     """Build a fixed, capacity-aware center--oxygen assignment.
 
     The assignment is an inference-only auxiliary variable derived from
     ``A, X, L``; it is not an additional generated design variable.  Each P
-    receives four distinct oxygens.  Each TM receives the locally least-cost
-    count in {4, 5, 6}.  Oxygen sharing up to degree two is preferred, while a
-    deterministic fallback keeps every center assigned when a sampled
+    receives four distinct oxygens. Each Fe receives the locally least-cost
+    one of the configured Fe coordination counts. Oxygen sharing up to degree
+    two is preferred, while a deterministic fallback keeps every center assigned when a sampled
     composition does not have enough degree-two oxygen slots.
     """
     offsets = {element: i for i, element in enumerate(DEFAULT_SPEC.elements)}
+    allowed_fe_counts = normalize_fe_coordination_options(fe_coordination_options)
     detached = distances.detach().cpu()
     types_cpu = type_index.detach().cpu()
     mask_cpu = mask.detach().cpu()
@@ -211,7 +223,7 @@ def _coordination_assignment(
             # endpoint correction.  A tiny tie-break favours lower CN and
             # therefore avoids inventing unnecessary bonds.
             costs: list[tuple[float, int]] = []
-            for count in (4, 5, 6):
+            for count in allowed_fe_counts:
                 if len(oxygen_distances) < count:
                     continue
                 included = sum(
@@ -487,16 +499,18 @@ def terminal_constraint_terms(
     mask: torch.Tensor,
     margin_A: float = 0.035,
     coordination_assignment: torch.Tensor | None = None,
-    fe_coordination_prior: tuple[float, float, float] | None = None,
+    fe_coordination_prior: tuple[float, ...] | None = None,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> dict[str, torch.Tensor]:
     """Piecewise-smooth penalties closely matching the discrete hard checks.
 
     Atom identities are fixed. P is driven to tetrahedral O4 and each
-    transition metal to octahedral O6 (one allowed member of {4, 5, 6}). The
-    next-nearest oxygen is explicitly pushed outside the bonding cutoff,
+    transition metal is driven to one of the configured oxygen coordination
+    counts. The next-nearest oxygen is explicitly pushed outside the bonding cutoff,
     avoiding the ambiguity of a soft coordination-number sum.
     """
     dtype = terminal.frac.dtype
+    allowed_fe_counts = normalize_fe_coordination_options(fe_coordination_options)
     type_index = terminal.atom.argmax(dim=-1)
     physical_lattice = unstandardize_lattice(
         terminal.lattice, model.lattice_mean, model.lattice_std
@@ -604,8 +618,8 @@ def terminal_constraint_terms(
             DEFAULT_SPEC.p_o_bond_cutoff,
         )
         p_loss = worst_site_loss(p_site_loss, phosphorus)
-        # The exact specification permits Fe coordination 4, 5, or 6. Use the
-        # locally easiest valid shell instead of forcing every Fe site to CN=6.
+        # Use the locally easiest allowed Fe shell instead of forcing every
+        # Fe site to one fixed coordination number.
         fe_count_losses = torch.stack(
             [
                 exact_count_site_loss(
@@ -614,7 +628,7 @@ def terminal_constraint_terms(
                     DEFAULT_SPEC.pair_minima["Fe-O"],
                     DEFAULT_SPEC.fe_o_bond_cutoff,
                 )
-                for count in (4, 5, 6)
+                for count in allowed_fe_counts
             ],
             dim=0,
         )
@@ -624,6 +638,10 @@ def terminal_constraint_terms(
             prior = torch.tensor(
                 fe_coordination_prior, dtype=dtype, device=mask.device
             )
+            if prior.numel() != len(allowed_fe_counts):
+                raise ValueError(
+                    "Fe coordination prior must have one value per allowed CN option"
+                )
             if bool((prior <= 0).any()) or not torch.isclose(
                 prior.sum(),
                 torch.ones((), dtype=dtype, device=mask.device),
@@ -639,16 +657,39 @@ def terminal_constraint_terms(
         p_pair_target = torch.full(
             (6,), 1.55 * (8.0 / 3.0) ** 0.5, dtype=dtype, device=mask.device
         )
-        tm_pair_target = torch.tensor(
-            [2.00 * 2.0**0.5] * 12 + [4.00] * 3,
-            dtype=dtype,
-            device=mask.device,
-        )
         p_geometry = polyhedron_geometry_loss(
             phosphorus, 4, 1.55, p_pair_target
         )
-        tm_geometry = polyhedron_geometry_loss(
-            iron, 6, 2.00, tm_pair_target
+
+        def fe_pair_targets(count: int) -> torch.Tensor:
+            if count == 4:
+                return torch.full(
+                    (6,),
+                    2.00 * (8.0 / 3.0) ** 0.5,
+                    dtype=dtype,
+                    device=mask.device,
+                )
+            if count == 5:
+                return torch.tensor(
+                    [2.00 * 2.0**0.5] * 6
+                    + [2.00 * 3.0**0.5] * 3
+                    + [4.00],
+                    dtype=dtype,
+                    device=mask.device,
+                )
+            return torch.tensor(
+                [2.00 * 2.0**0.5] * 12 + [4.00] * 3,
+                dtype=dtype,
+                device=mask.device,
+            )
+
+        tm_geometry_losses = torch.stack([
+            polyhedron_geometry_loss(iron, count, 2.00, fe_pair_targets(count))
+            for count in allowed_fe_counts
+        ])
+        tm_geometry_temperature = 0.10
+        tm_geometry = -tm_geometry_temperature * torch.logsumexp(
+            -tm_geometry_losses / tm_geometry_temperature, dim=0
         )
     polyhedron = polyhedron_constraint_terms(model, terminal, mask)
     return {
@@ -670,6 +711,8 @@ def optimize_terminal(
     learning_rate: float = 0.025,
     weights: TerminalWeights = TerminalWeights(),
     fixed_coordination_assignment: bool = False,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
+    fe_coordination_prior: tuple[float, ...] | None = None,
 ) -> tuple[CrystalState, list[dict[str, float]]]:
     """ShootingFlow endpoint correction with fixed generated composition.
 
@@ -696,7 +739,10 @@ def optimize_terminal(
             initial_distances = _periodic_distances_27(state.frac, lattice)
             type_index = state.atom.argmax(dim=-1)
             coordination_assignment = _coordination_assignment(
-                type_index, mask, initial_distances
+                type_index,
+                mask,
+                initial_distances,
+                fe_coordination_options=fe_coordination_options,
             )
     optimized = [state.frac, state.lattice]
     optimizer = torch.optim.Adam(optimized, lr=learning_rate)
@@ -708,6 +754,8 @@ def optimize_terminal(
             state,
             mask,
             coordination_assignment=coordination_assignment,
+            fe_coordination_prior=fe_coordination_prior,
+            fe_coordination_options=fe_coordination_options,
         )
         circular_delta = state.frac - reference_frac
         circular_delta = circular_delta - torch.floor(circular_delta + 0.5)
@@ -760,6 +808,7 @@ def optimize_source(
     integrator: str = "midpoint",
     weights: GuidanceWeights = GuidanceWeights(),
     freeze_atom: bool = False,
+    fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
 ) -> tuple[CrystalState, list[dict[str, float]]]:
     """Single-shooting D-Flow optimization of x0 with frozen flow weights."""
     for parameter in model.parameters():
@@ -784,7 +833,12 @@ def optimize_source(
             method=integrator,
             freeze_atom=freeze_atom,
         )
-        terms = soft_constraint_terms(model, terminal, mask)
+        terms = soft_constraint_terms(
+            model,
+            terminal,
+            mask,
+            fe_coordination_options=fe_coordination_options,
+        )
         prior = _source_prior(source, mask)
         loss = (
             weights.distance * terms["distance"]
