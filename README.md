@@ -42,8 +42,8 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 | ![设计变量](https://img.shields.io/badge/-Design_Variable-8250df?style=flat-square) | 晶格矩阵 | $\mathbf L\in\mathbb R^{3\times3}$ | 指定晶胞尺寸和形状；同时也是原始弛豫任务通过晶胞过滤器更新的变量。 |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 元素组成 | 仅包含 Na、Fe、P、O，且四种元素均出现 | ✓ Na<sub>6</sub>Fe<sub>6</sub>P<sub>8</sub>O<sub>32</sub> |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Fe 平均形式价态 | $\bar z_{\mathrm{Fe}} \ge 2$ | ✓ $\bar z_{\mathrm{Fe}} = 3.0$ |
-| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 理论比容量 | $C_{\mathrm{th}} \ge 130$ mAh g$^{-1}$ | ✓ 130.4 mAh g$^{-1}$ |
-| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 体积 | 10.5–20.5 Å$^3$/atom | ✓ 12.91–16.41 Å$^3$/atom |
+| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 理论比容量 | $C_{\mathrm{th}} \ge 130 mAh g^{-1}$ | ✓ 130.4 mAh $g^{-1}$ |
+| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 体积 | 10.5–20.5 $Å^3$/atom | ✓ 12.91–16.41 $Å^3$/atom |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 原胞原子数 | $23 \le N_{\mathrm{prim}} \le 184$ | ✓ 当前晶胞 $N = 52$ |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | PBC 最小距离 | P–O $\ge 1.40$；Fe–O $\ge 1.55$；Na–O/O–O $\ge 2.00$；P–P $\ge 2.60$；Na–Na $\ge 2.20$ Å | ✓ 无 PBC 重叠；P–O 1.474–1.652 Å，Fe–O 1.791–2.428 Å |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | P–O 配位 | $r_{\mathrm{P-O}} \le 2.00$ Å；CN(P) = 4 | ✓ 全部为 PO<sub>4</sub>；8/8 个 P 通过 |
@@ -52,7 +52,7 @@ ShootingFlow CSP 可实现高精度、可控的晶体结构生成。它将目标
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | Fe 多面体相邻关系 | 任意 Fe–Fe 共用 O 数 $\le 2$ | ✓ 任意两个 Fe–O 配位多面体均不共用同一个氧三角面 |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 氧覆盖 | 全部 O 均被骨架多面体覆盖 | ✓ 32/32 个 O 被覆盖 |
 | ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | UMA $E_{\mathrm{hull}}$ | $E_{\mathrm{hull}}^{\mathrm{UMA}} \le 150$ meV/atom | ✓ 100.00–146.21 meV/atom |
-| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 原子力收敛 | $F_{\max} \le 0.03$ eV Å$^{-1}$ | ✓ 0.01874–0.02996 eV Å$^{-1}$ |
+| ![约束](https://img.shields.io/badge/-Constraint-0969da?style=flat-square) | 原子力收敛 | $F_{\max} \le 0.03$ eV $Å^{-1}$ | ✓ 0.01874–0.02996 eV $Å^{-1}$ |
 
 ## 三、代理模型
 
