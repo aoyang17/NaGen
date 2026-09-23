@@ -1,4 +1,4 @@
-# ShootingFlow CSP（高精度可控晶体结构生成）
+# ShootingCSP（高精度可控晶体结构生成）
 
 [中文](README.md) | [English](README.en.md)
 
