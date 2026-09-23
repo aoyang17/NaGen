@@ -2,6 +2,10 @@
 
 [中文](README.md) | [English](README.en.md)
 
+[![CI](https://github.com/aoyang17/ShootingCSP/actions/workflows/ci.yml/badge.svg)](https://github.com/aoyang17/ShootingCSP/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+
 ShootingCSP 是面向高精度、可控晶体结构生成的 Python 库。它将目标晶体的几何/性质约束表述为优化问题，并将这些约束逐步传播到生成式推理过程中，从而生成同时符合数据流形（目标晶体的先验知识）与高维约束的晶体。其核心算法 ShootingFlow 将 flow-matching 推理与优化表述为由最优控制理论中的打靶法求解的边值问题。
 
 我们以 Na-Fe-P-O 磷酸盐晶体生成任务为例。项目包含三个模块：
@@ -36,7 +40,7 @@ python -m shootingcsp.training.train_flow --help
 数据集适配器和独立 surrogate model 接口见
 [TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md)。
 
-当前版本为 `0.1.0`，采用 MIT License。引用信息见 `CITATION.cff`。
+当前版本为 `0.1.0`，采用 Apache License 2.0。引用信息见 `CITATION.cff`。
 
 ## 一、晶体表示
 

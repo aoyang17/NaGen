@@ -19,7 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - Swappable differentiable surrogate model registry.
 - Built-in UMA surrogate adapter.
 - Independent surrogate evaluation interface.
-- Library metadata, MIT license, citation metadata, packaging defaults,
+- Library metadata, Apache-2.0 license, citation metadata, packaging defaults,
   changelog, contribution policy, security policy, and CI/release workflows.
 
 ### Changed
@@ -27,5 +27,5 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - The active Python package is now `shootingcsp`.
 - The previous implementations remain available under `legacy/` for reference.
 
-[Unreleased]: https://github.com/aoyang17/NaGen/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/aoyang17/NaGen/releases/tag/v0.1.0
+[Unreleased]: https://github.com/aoyang17/ShootingCSP/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/aoyang17/ShootingCSP/releases/tag/v0.1.0

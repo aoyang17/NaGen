@@ -1,6 +1,10 @@
+# ShootingCSP (High-Precision Controllable Crystal Structure Generation)
+
 [中文](README.md) | [English](README.en.md)
 
-# ShootingCSP (High-Precision Controllable Crystal Structure Generation)
+[![CI](https://github.com/aoyang17/ShootingCSP/actions/workflows/ci.yml/badge.svg)](https://github.com/aoyang17/ShootingCSP/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 ShootingCSP is a Python library for high-precision, controllable crystal structure generation. It formulates geometric/property constraints on target crystals as an optimization problem and progressively propagates them into generative inference, yielding crystals that conform to both the data manifold (prior knowledge of target crystals) and high-dimensional constraints. Its core algorithm, ShootingFlow, casts flow-matching inference and optimization as a boundary value problem solved via the shooting method from optimal control theory.
 
@@ -31,7 +35,7 @@ python -m shootingcsp.training.train_flow --help
 Dataset adapters and independent surrogate-model interfaces are documented in
 [TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md).
 
-The initial library release is version `0.1.0` under the MIT License. Citation
+The initial library release is version `0.1.0` under the Apache License 2.0. Citation
 metadata is provided in `CITATION.cff`.
 
 ## Crystal representation

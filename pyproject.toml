@@ -7,8 +7,8 @@ name = "shootingcsp"
 version = "0.1.0"
 description = "ShootingCSP: constrained crystal structure prediction powered by ShootingFlow"
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
 authors = [
   { name = "Aobo Yang" },
 ]
@@ -23,11 +23,11 @@ keywords = [
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Scientific/Engineering :: Chemistry",
   "Topic :: Scientific/Engineering :: Physics",
@@ -60,15 +60,15 @@ dev = [
 shootingcsp-train-flow = "shootingcsp.training.train_flow:main"
 
 [project.urls]
-Homepage = "https://github.com/aoyang17/NaGen"
-Repository = "https://github.com/aoyang17/NaGen"
-Issues = "https://github.com/aoyang17/NaGen/issues"
-Changelog = "https://github.com/aoyang17/NaGen/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/aoyang17/ShootingCSP"
+Repository = "https://github.com/aoyang17/ShootingCSP"
+Issues = "https://github.com/aoyang17/ShootingCSP/issues"
+Changelog = "https://github.com/aoyang17/ShootingCSP/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["shootingcsp*"]
-exclude = ["nagen*", "test*"]
+exclude = ["test*"]
 
 [tool.setuptools.package-data]
 shootingcsp = ["py.typed"]
