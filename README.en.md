@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="asset/logo.png" alt="ShootingCSP logo" width="360">
+</p>
+
 # ShootingCSP (High-Precision Controllable Crystal Structure Generation)
 
 [中文](README.md) | [English](README.en.md)

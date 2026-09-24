@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="asset/logo.png" alt="ShootingCSP logo" width="360">
+</p>
+
 # ShootingCSP（高精度可控晶体结构生成）
 
 [中文](README.md) | [English](README.en.md)
