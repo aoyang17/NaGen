@@ -130,7 +130,7 @@ def _coordination_checks(
         ]
         coordination = len(neighbours)
         if element == "P":
-            p_ok &= coordination == 4
+            p_ok &= coordination in spec.p_coordination_options
         else:
             fe_ok &= coordination in spec.fe_coordination_options
         sites.append({"site": i, "element": element, "coordination": coordination})

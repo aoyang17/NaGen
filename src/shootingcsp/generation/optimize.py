@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import torch
 
@@ -11,6 +11,8 @@ from shootingcsp.inverse.model import CrystalState
 from shootingcsp.inverse.sample import decode_terminal, integrate_flow
 from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
+    DEFAULT_SPEC,
+    OptimizationSpec,
     normalize_fe_coordination_options,
 )
 
@@ -28,6 +30,9 @@ def optimize_source_with_surrogate(
     lr: float,
     ode_steps: int,
     fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
+    p_coordination_options=None,
+    spec: OptimizationSpec = DEFAULT_SPEC,
+    weights: Mapping[str, float] | None = None,
 ):
     """Optimize Flow source X/L through the complete terminal ODE.
 
@@ -38,6 +43,15 @@ def optimize_source_with_surrogate(
     if steps < 0 or ode_steps < 1 or lr <= 0:
         raise ValueError("steps must be nonnegative, lr positive, and ode_steps positive")
     allowed_fe = normalize_fe_coordination_options(fe_coordination_options)
+    allowed_p = tuple(p_coordination_options or spec.p_coordination_options)
+    loss_weights = dict(weights or {
+        "energy_weight": 0.10,
+        "distance_weight": 20.0,
+        "p_coordination_weight": 3.0,
+        "fe_coordination_weight": 3.0,
+        "volume_weight": 2.0,
+        "source_prior_weight": 0.02,
+    })
     frac = source.frac.detach().clone().requires_grad_(True)
     lattice = source.lattice.detach().clone().requires_grad_(True)
     optimizer = torch.optim.Adam((frac, lattice), lr=lr)
@@ -61,15 +75,17 @@ def optimize_source_with_surrogate(
             mask,
             probabilities_override=core_probabilities,
             fe_coordination_options=allowed_fe,
+            p_coordination_options=allowed_p,
+            spec=spec,
         )
         prior = _source_prior(state, mask)
         loss = (
-            0.10 * energy
-            + 20.0 * soft["distance"]
-            + 3.0 * soft["p_coordination"]
-            + 3.0 * soft["fe_coordination"]
-            + 2.0 * soft["volume"]
-            + 0.02 * prior
+            loss_weights["energy_weight"] * energy
+            + loss_weights["distance_weight"] * soft["distance"]
+            + loss_weights["p_coordination_weight"] * soft["p_coordination"]
+            + loss_weights["fe_coordination_weight"] * soft["fe_coordination"]
+            + loss_weights["volume_weight"] * soft["volume"]
+            + loss_weights["source_prior_weight"] * prior
         )
         loss.backward()
         torch.nn.utils.clip_grad_norm_((frac, lattice), 5.0)
@@ -83,6 +99,7 @@ def optimize_source_with_surrogate(
                 "surrogate_energy_eV_atom": float(energy.detach()),
                 **{f"soft_{name}": float(value.detach()) for name, value in soft.items()},
                 "source_prior": float(prior.detach()),
+                "p_coordination_options": list(allowed_p),
                 "fe_coordination_options": list(allowed_fe),
             }
         )

@@ -1,0 +1,88 @@
+{
+  "schema_version": "shootingcsp.constraints.v1",
+  "name": "na_fe_po_default",
+  "composition": {
+    "enabled": true,
+    "elements": ["Na", "Fe", "P", "O"],
+    "require_all_elements": true,
+    "fixed_counts": {"Na": 6, "Fe": 6, "P": 8, "O": 32}
+  },
+  "valence": {
+    "enabled": true,
+    "fe_min": 2.0,
+    "fe_max": 4.5
+  },
+  "capacity": {
+    "enabled": true,
+    "min_mAh_g": 130.0
+  },
+  "cell": {
+    "volume_per_atom_A3": {"enabled": true, "min": 10.5, "max": 20.5},
+    "primitive_atom_count": {"enabled": true, "min": 23, "max": 184}
+  },
+  "pbc": {
+    "enabled": true,
+    "generic_radius_fraction": 0.75,
+    "pair_minima_A": {
+      "P-O": 1.40,
+      "Fe-O": 1.55,
+      "Na-O": 2.00,
+      "O-O": 2.00,
+      "P-P": 2.60,
+      "Na-Na": 2.20
+    }
+  },
+  "coordination": {
+    "P": {"enabled": true, "allowed": [4], "cutoff_A": 2.00},
+    "Fe": {"enabled": true, "allowed": [4, 5], "cutoff_A": 2.50}
+  },
+  "polyhedra": {
+    "enabled": true,
+    "require_center_inside": true,
+    "fe_shared_oxygen_max": 2,
+    "forbid_coplanar_faces": true,
+    "minimum_face_angle_deg": 30.0
+  },
+  "oxygen_coverage": {
+    "enabled": true,
+    "require_all": true
+  },
+  "energy": {
+    "enabled": true,
+    "hull_max_eV_atom": 0.150
+  },
+  "force": {
+    "enabled": true,
+    "max_eV_A": 0.030
+  },
+  "relaxation": {
+    "enabled": true,
+    "maxstep_A": 0.10,
+    "max_steps": 400,
+    "max_force_eV_A": 0.030,
+    "refine_max_steps": 1000,
+    "refine_trigger_force_eV_A": 0.050,
+    "refine_trigger_hull_eV_atom": 0.150
+  },
+  "novelty": {
+    "enabled": true,
+    "strip_elements": ["Na"],
+    "require_structure_nonmatch": true,
+    "require_topology_nonmatch": true,
+    "minimum_descriptor_distance": 1e-4
+  },
+  "optimization": {
+    "energy_weight": 0.10,
+    "distance_weight": 20.0,
+    "p_coordination_weight": 3.0,
+    "fe_coordination_weight": 3.0,
+    "volume_weight": 2.0,
+    "source_prior_weight": 0.02
+  },
+  "source_precheck": {
+    "enabled": true,
+    "volume_per_atom_A3": {"min": 2.0, "max": 60.0},
+    "max_cell_condition_number": 40.0,
+    "minimum_distance_A": 0.40
+  }
+}

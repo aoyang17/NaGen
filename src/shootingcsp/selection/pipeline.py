@@ -14,8 +14,15 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from scipy.stats import rankdata
 
+from shootingcsp.config import ConstraintConfig, to_optimization_spec
+from shootingcsp.inverse.constraints import (
+    composition_metrics,
+    minimum_distance,
+    pbc_distance_matrix,
+)
 from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
+    DEFAULT_SPEC,
     normalize_fe_coordination_options,
 )
 
@@ -150,28 +157,50 @@ def calibrate(training, min_structures=20, cutoffs=None):
             "min_structures": min_structures, "cutoffs": cutoffs, "profiles": profiles}
 
 
-def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
-               external_filter=None, fe_valences=(2, 3), motif_backend="external",
-               fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS):
-    """Final force = max atom Euclidean force norm, in eV/A; unknown fails.
+def hard_gates(
+    crystal,
+    condition,
+    profile,
+    forces=None,
+    force_threshold=.05,
+    external_filter=None,
+    fe_valences=(2, 3),
+    motif_backend="external",
+    fe_coordination_options=DEFAULT_FE_COORDINATION_OPTIONS,
+    p_coordination_options=None,
+    constraint_config: ConstraintConfig | None = None,
+    delta_e_hull_eV_atom: float | None = None,
+    enforce_force: bool = True,
+    enforce_energy: bool = True,
+):
+    """Evaluate exact structure gates using either legacy arguments or JSON policy.
 
-    external_filter(crystal) must return {'passed': bool, 'details': ...}.
-    Missing external tool is explicitly unverified, never silently accepted.
+    When ``constraint_config`` is supplied, enabled fields and their numeric
+    values come from the versioned ShootingCSP constraint JSON. Disabled checks
+    are omitted; unknown required measurements fail closed.
     """
     if not np.isfinite(force_threshold) or force_threshold <= 0:
         raise ValueError("force_threshold must be positive")
     if motif_backend not in {"external", "native"}:
         raise ValueError("unknown motif backend")
-    allowed_fe_coordination = normalize_fe_coordination_options(
-        fe_coordination_options
+    policy = constraint_config
+    spec = to_optimization_spec(policy) if policy is not None else DEFAULT_SPEC
+    allowed_fe_coordination = (
+        spec.fe_coordination_options
+        if policy is not None
+        else normalize_fe_coordination_options(fe_coordination_options)
     )
+    allowed_p_coordination = tuple(
+        sorted({int(value) for value in (p_coordination_options or spec.p_coordination_options)})
+    )
+    if policy is not None and policy.force.enabled:
+        force_threshold = policy.force.max_eV_A
     frac, cell = np.asarray(crystal.frac), np.asarray(crystal.lattice)
     finite = (frac.shape == (len(crystal.elements), 3) and cell.shape == (3, 3)
               and np.isfinite(frac).all() and np.isfinite(cell).all())
     cell_ok = bool(finite and abs(np.linalg.det(cell)) > 1e-6
                    and np.linalg.cond(cell) < 100)
     counts = Counter(crystal.elements)
-    # Na+, P5+, O2-; the explicitly configured Fe oxidation-state model.
     if not fe_valences or any(type(v) is not int or v <= 0 for v in fe_valences):
         raise ValueError("Fe valences must be positive integers")
     required = 2 * counts["O"] - counts["Na"] - 5 * counts["P"]
@@ -179,47 +208,136 @@ def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
     for _ in range(counts["Fe"]):
         totals = {q + v for q in totals for v in fe_valences}
     charge = counts["Fe"] > 0 and required in totals
-    checks = {"conditioning": condition.matches(crystal), "cell": cell_ok,
-              "charge": bool(charge)}
-    f = np.asarray(forces) if forces is not None else np.array([])
-    force_known = f.shape == (len(crystal.elements), 3) and np.isfinite(f).all()
-    fmax = float(np.linalg.norm(f, axis=1).max()) if force_known and len(f) else None
-    checks["final_force"] = fmax is not None and fmax <= force_threshold
-    checks["overlap"] = checks["motif"] = checks["oxygen_coverage"] = False
-    rows, violations = [], []
-    if cell_ok and checks["conditioning"]:
-        # Conservative catastrophic-overlap limits, not equilibrium bond targets.
+    composition = composition_metrics(crystal.elements, spec)
+
+    checks = {"conditioning": condition.matches(crystal), "cell": cell_ok}
+    checks["charge"] = bool(charge)
+    if policy is not None and policy.valence.enabled:
+        checks["fe_valence_range"] = bool(composition["charge_ok"])
+    if policy is not None and policy.capacity.enabled:
+        checks["capacity"] = bool(composition["capacity_ok"])
+    if policy is not None and policy.cell.volume_per_atom_A3.enabled:
+        volume_per_atom = abs(float(np.linalg.det(cell))) / max(len(crystal.elements), 1)
+        checks["volume_per_atom"] = bool(
+            finite and spec.volume_per_atom_min_A3 <= volume_per_atom <= spec.volume_per_atom_max_A3
+        )
+    if policy is not None and policy.cell.primitive_atom_count.enabled:
+        checks["primitive_atom_count"] = bool(
+            spec.n_primitive_min <= len(crystal.elements) <= spec.n_primitive_max
+        )
+    if enforce_force and (policy is None or policy.force.enabled):
+        f = np.asarray(forces) if forces is not None else np.array([])
+        force_known = f.shape == (len(crystal.elements), 3) and np.isfinite(f).all()
+        fmax = float(np.linalg.norm(f, axis=1).max()) if force_known and len(f) else None
+        checks["final_force"] = fmax is not None and fmax <= force_threshold
+    else:
+        fmax = None
+
+    distance_violations: list[dict[str, object]] = []
+    if cell_ok and policy is not None and policy.pbc.enabled:
+        distances = pbc_distance_matrix(frac, cell)
+        for i in range(len(crystal.elements)):
+            for j in range(i + 1, len(crystal.elements)):
+                threshold = minimum_distance(crystal.elements[i], crystal.elements[j], spec)
+                observed = float(distances[i, j])
+                if observed + 1e-10 < threshold:
+                    distance_violations.append({
+                        "i": i, "j": j,
+                        "pair": f"{crystal.elements[i]}-{crystal.elements[j]}",
+                        "distance_A": observed,
+                        "minimum_A": threshold,
+                    })
+        checks["minimum_pbc_distances"] = not distance_violations
+
+    motif_enabled = policy is None or (
+        policy.coordination.P.enabled
+        or policy.coordination.Fe.enabled
+        or policy.polyhedra.enabled
+        or policy.oxygen_coverage.enabled
+    )
+    overlap_violations: list[dict[str, object]] = []
+    rows: list[dict] = []
+    if cell_ok and checks["conditioning"] and motif_enabled:
         radii = {"Na": 1.66, "Fe": 1.32, "P": 1.07, "O": .66}
         for i, e in enumerate(crystal.elements):
             for j, _, distance in neighbors(crystal, i, 2.0):
                 threshold = .6 * (radii[e] + radii[crystal.elements[j]])
                 if distance < threshold:
-                    violations.append({"i": i, "j": j, "distance": distance})
-        checks["overlap"] = not violations
-        rows = motifs(crystal, profile["cutoffs"])
+                    overlap_violations.append({"i": i, "j": j, "distance": distance})
+        checks["overlap"] = not overlap_violations
+        cutoffs = (
+            {"P": spec.p_o_bond_cutoff, "Fe": spec.fe_o_bond_cutoff}
+            if policy is not None else profile["cutoffs"]
+        )
+        rows = motifs(crystal, cutoffs)
         for row in rows:
             key = f"{crystal.family}:{row['element']}:{row['cn']}"
             ref = profile["profiles"].get(key, {})
             supported = (ref.get("structures", 0) >= profile["min_structures"]
                          and "bond_min" in ref)
-            row["supported"] = supported
-            row["allowed_coordination"] = bool(
-                row["element"] != "Fe"
-                or row["cn"] in allowed_fe_coordination
+            element_rule = (
+                policy.coordination.P if row["element"] == "P"
+                else policy.coordination.Fe
+            ) if policy is not None else None
+            coordination_ok = (
+                True if element_rule is not None and not element_rule.enabled
+                else row["cn"] in (
+                    allowed_p_coordination if row["element"] == "P"
+                    else allowed_fe_coordination
+                )
             )
-            row["passed"] = bool(supported and row["inside"]
-                and (row["element"] != "P" or row["cn"] == 4)
-                and row["allowed_coordination"]
+            center_ok = True
+            if policy is not None and policy.polyhedra.enabled and policy.polyhedra.require_center_inside:
+                center_ok = bool(row["inside"])
+            elif policy is None:
+                center_ok = bool(row["inside"])
+            row["supported"] = supported
+            row["allowed_coordination"] = bool(coordination_ok)
+            row["passed"] = bool(
+                supported and center_ok and coordination_ok
                 and row["bond_min"] >= ref["bond_min"]
-                and row["bond_max"] <= ref["bond_max"])
+                and row["bond_max"] <= ref["bond_max"]
+            )
             if supported and len(row["angles"]) == len(ref["angle_reference"]):
                 target = ([109.4712206] * 6 if row["element"] == "P"
                           else ref["angle_reference"])
                 row["angle_distortion"] = float(np.sqrt(np.mean(
                     (np.asarray(row["angles"]) - target) ** 2)) / 180)
         checks["motif"] = bool(rows and all(r["passed"] for r in rows))
-        covered = {i for r in rows for i in r["oxygen_indices"]}
-        checks["oxygen_coverage"] = covered == {i for i, e in enumerate(crystal.elements) if e == "O"}
+        if policy is None or policy.oxygen_coverage.enabled:
+            covered = {i for r in rows for i in r["oxygen_indices"]}
+            required_oxygen = {i for i, e in enumerate(crystal.elements) if e == "O"}
+            checks["oxygen_coverage"] = (
+                covered == required_oxygen
+                if policy is None or policy.oxygen_coverage.require_all
+                else covered.issubset(required_oxygen)
+            )
+        if policy is not None and policy.polyhedra.enabled:
+            iron = [r for r in rows if r["element"] == "Fe"]
+            violations = []
+            for first in range(len(iron)):
+                for second in range(first + 1, len(iron)):
+                    shared = len(set(iron[first]["oxygen_indices"]) & set(iron[second]["oxygen_indices"]))
+                    if shared > policy.polyhedra.fe_shared_oxygen_max:
+                        violations.append({
+                            "site_i": iron[first]["site"],
+                            "site_j": iron[second]["site"],
+                            "shared_oxygen": shared,
+                        })
+            checks["fe_shared_oxygen"] = not violations
+    elif motif_enabled:
+        checks["overlap"] = False
+        checks["motif"] = False
+        if policy is None or policy.oxygen_coverage.enabled:
+            checks["oxygen_coverage"] = False
+
+    if enforce_energy and policy is not None and policy.energy.enabled:
+        checks["hull_threshold"] = bool(
+            delta_e_hull_eV_atom is not None
+            and np.isfinite(delta_e_hull_eV_atom)
+            and delta_e_hull_eV_atom <= policy.energy.hull_max_eV_atom
+        )
+
     external = {"passed": False, "details": "PolyAnionCathodeFilter unavailable"}
     if external_filter is not None and cell_ok and checks["conditioning"]:
         external = external_filter(crystal)
@@ -229,24 +347,36 @@ def hard_gates(crystal, condition, profile, forces=None, force_threshold=.05,
         checks["external_motif"] = external["passed"]
     else:
         external = {"passed": None, "details": "native periodic motif implementation; external tool not invoked"}
+
     metrics = {}
-    if checks["motif"]:
+    if checks.get("motif"):
         for element in ("P", "Fe"):
             sites = [r for r in rows if r["element"] == element]
+            if not sites:
+                continue
             for metric in ("off_center", "bond_distortion", "angle_distortion"):
                 metrics[f"{element}_{metric}"] = max(r[metric] for r in sites)
-            # Worst site support rarity; continuous local CN quality proxy.
             frequencies = [profile["profiles"][f"{crystal.family}:{element}:{r['cn']}"]
                            ["structures"] / len(profile["training_ids"]) for r in sites]
             metrics[f"{element}_coordination_rarity"] = 1 - min(frequencies)
-    return {"id": crystal.id, "passed": all(checks.values()), "checks": checks,
-            "motif_backend": motif_backend,
-            "allowed_fe_coordination": list(allowed_fe_coordination),
-            "charge_model": {"Na": 1, "P": 5, "O": -2, "Fe": list(fe_valences),
-                             "required_Fe_average": required / counts["Fe"] if counts["Fe"] else None},
-            "force_max_eV_A": fmax, "sites": rows, "overlaps": violations,
-            "external": external, "metrics": metrics}
-
+    return {
+        "id": crystal.id,
+        "passed": all(checks.values()),
+        "checks": checks,
+        "motif_backend": motif_backend,
+        "allowed_p_coordination": list(allowed_p_coordination),
+        "allowed_fe_coordination": list(allowed_fe_coordination),
+        "charge_model": {
+            "Na": 1, "P": 5, "O": -2, "Fe": list(fe_valences),
+            "required_Fe_average": required / counts["Fe"] if counts["Fe"] else None,
+        },
+        "force_max_eV_A": fmax,
+        "sites": rows,
+        "overlaps": overlap_violations,
+        "distance_violations": distance_violations,
+        "external": external,
+        "metrics": metrics,
+    }
 
 def robust_rank(candidates, metrics):
     """Within composition/family, rank lower-is-better metrics; worst first.

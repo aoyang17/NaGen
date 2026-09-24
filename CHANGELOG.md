@@ -7,6 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-24
+
+### Added
+
+- Versioned `shootingcsp.constraints.v1` constraint configuration.
+- Offline ShootingCSP constraint builder with JSON import/export.
+- Primary `shootingcsp-generate` command driven by constraint JSON.
+- `shootingcsp-validate-constraints` configuration validator.
+- Configurable objectives, hard gates, relaxation thresholds, novelty policy,
+  source prechecks, and ShootingFlow optimization weights.
+
+### Changed
+
+- Fe-O coordination defaults now follow the current task table (`{4,5}`).
+- Exact hard gates consume the same normalized configuration as soft guidance.
+
 ## [0.1.0] - 2026-09-23
 
 ### Added
@@ -27,5 +43,6 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - The active Python package is now `shootingcsp`.
 - The previous implementations remain available under `legacy/` for reference.
 
-[Unreleased]: https://github.com/aoyang17/ShootingCSP/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/aoyang17/ShootingCSP/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/aoyang17/ShootingCSP/releases/tag/v0.2.0
 [0.1.0]: https://github.com/aoyang17/ShootingCSP/releases/tag/v0.1.0

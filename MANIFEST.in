@@ -6,3 +6,5 @@ include CHANGELOG.md
 include CITATION.cff
 include VERSIONING.md
 recursive-include src/shootingcsp py.typed
+recursive-include configs *.json
+recursive-include docs *.md *.html

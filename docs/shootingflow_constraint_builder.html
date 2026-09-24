@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ShootingCSP Constraint Builder</title>
+  <style>
+    :root { --ink:#1e2b38; --muted:#607080; --line:#d9e1e8; --accent:#0f766e; --blue:#2563eb; --bg:#f7fafc; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:24px; color:var(--ink); background:var(--bg); font:14px/1.45 system-ui,"Microsoft YaHei",sans-serif; }
+    main { max-width:1240px; margin:auto; }
+    header { position:sticky; top:0; z-index:5; background:rgba(247,250,252,.96); border-bottom:1px solid var(--line); padding:12px 0 14px; margin-bottom:18px; }
+    h1 { margin:0 0 6px; font-size:25px; }
+    h2 { font-size:17px; margin:0; }
+    p { margin:6px 0; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    button, label.file { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:7px; padding:8px 12px; cursor:pointer; font-weight:650; }
+    button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    button.blue { background:var(--blue); color:#fff; border-color:var(--blue); }
+    input[type=file] { display:none; }
+    .layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(330px,1fr); gap:18px; align-items:start; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius:10px; padding:15px; }
+    details.section { background:#fff; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; }
+    details.section > summary { cursor:pointer; padding:13px 15px; font-weight:750; color:#17324d; }
+    .section-body { padding:0 15px 15px; }
+    .field { display:grid; grid-template-columns:minmax(220px,1fr) minmax(160px,1fr); gap:12px; align-items:center; padding:7px 0; border-top:1px dashed #e7edf2; }
+    .field:first-child { border-top:0; }
+    .field label { font-weight:600; }
+    .field .hint { color:var(--muted); font-size:12px; margin-left:7px; font-weight:400; }
+    input[type=text], input[type=number] { width:100%; border:1px solid var(--line); border-radius:6px; padding:7px 8px; font:inherit; background:#fff; }
+    input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+    pre { white-space:pre-wrap; word-break:break-word; background:#0f172a; color:#dbeafe; padding:14px; border-radius:8px; max-height:520px; overflow:auto; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    #status { min-height:22px; color:var(--accent); font-weight:650; }
+    .error { color:#b42318 !important; }
+    .math { font-family:"Cambria Math","STIX Two Math","Times New Roman",serif; white-space:nowrap; }
+    .math i { font-style:italic; }
+    .math sub, .math sup { font-size:.72em; line-height:0; }
+    code { background:#eef2f6; padding:1px 4px; border-radius:4px; }
+    @media (max-width:900px) { .layout { grid-template-columns:1fr; } .field { grid-template-columns:1fr; gap:4px; } header { position:static; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ShootingCSP Constraint Builder</h1>
+    <p>修改任意约束后导出 <code>shootingcsp.constraints.json</code>。该文件是 Python 生成主命令的唯一物理约束来源。</p>
+    <div class="actions">
+      <label class="file">导入 JSON<input id="importFile" type="file" accept=".json,application/json"></label>
+      <button class="primary" id="exportButton">导出 JSON</button>
+      <button class="blue" id="copyButton">复制运行命令</button>
+      <button id="resetButton">恢复默认</button>
+    </div>
+    <div id="status"></div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <div id="form"></div>
+    </div>
+    <aside class="panel">
+      <h2>Resolved JSON</h2>
+      <p>导出的文件会保留约束版本的 <code>schema_version</code>。</p>
+      <pre id="preview"></pre>
+      <h2>运行命令</h2>
+      <pre id="command"></pre>
+    </aside>
+  </div>
+</main>
+
+<script type="application/json" id="defaults">{
+  "schema_version": "shootingcsp.constraints.v1",
+  "name": "na_fe_po_default",
+  "composition": {
+    "enabled": true,
+    "elements": [
+      "Na",
+      "Fe",
+      "P",
+      "O"
+    ],
+    "require_all_elements": true,
+    "fixed_counts": {
+      "Na": 6,
+      "Fe": 6,
+      "P": 8,
+      "O": 32
+    }
+  },
+  "valence": {
+    "enabled": true,
+    "fe_min": 2.0,
+    "fe_max": 4.5
+  },
+  "capacity": {
+    "enabled": true,
+    "min_mAh_g": 130.0
+  },
+  "cell": {
+    "volume_per_atom_A3": {
+      "enabled": true,
+      "min": 10.5,
+      "max": 20.5
+    },
+    "primitive_atom_count": {
+      "enabled": true,
+      "min": 23,
+      "max": 184
+    }
+  },
+  "pbc": {
+    "enabled": true,
+    "generic_radius_fraction": 0.75,
+    "pair_minima_A": {
+      "P-O": 1.4,
+      "Fe-O": 1.55,
+      "Na-O": 2.0,
+      "O-O": 2.0,
+      "P-P": 2.6,
+      "Na-Na": 2.2
+    }
+  },
+  "coordination": {
+    "P": {
+      "enabled": true,
+      "allowed": [
+        4
+      ],
+      "cutoff_A": 2.0
+    },
+    "Fe": {
+      "enabled": true,
+      "allowed": [
+        4,
+        5
+      ],
+      "cutoff_A": 2.5
+    }
+  },
+  "polyhedra": {
+    "enabled": true,
+    "require_center_inside": true,
+    "fe_shared_oxygen_max": 2,
+    "forbid_coplanar_faces": true,
+    "minimum_face_angle_deg": 30.0
+  },
+  "oxygen_coverage": {
+    "enabled": true,
+    "require_all": true
+  },
+  "energy": {
+    "enabled": true,
+    "hull_max_eV_atom": 0.15
+  },
+  "force": {
+    "enabled": true,
+    "max_eV_A": 0.03
+  },
+  "relaxation": {
+    "enabled": true,
+    "maxstep_A": 0.1,
+    "max_steps": 400,
+    "max_force_eV_A": 0.03,
+    "refine_max_steps": 1000,
+    "refine_trigger_force_eV_A": 0.05,
+    "refine_trigger_hull_eV_atom": 0.15
+  },
+  "novelty": {
+    "enabled": true,
+    "strip_elements": [
+      "Na"
+    ],
+    "require_structure_nonmatch": true,
+    "require_topology_nonmatch": true,
+    "minimum_descriptor_distance": 0.0001
+  },
+  "optimization": {
+    "energy_weight": 0.1,
+    "distance_weight": 20.0,
+    "p_coordination_weight": 3.0,
+    "fe_coordination_weight": 3.0,
+    "volume_weight": 2.0,
+    "source_prior_weight": 0.02
+  },
+  "source_precheck": {
+    "enabled": true,
+    "volume_per_atom_A3": {
+      "min": 2.0,
+      "max": 60.0
+    },
+    "max_cell_condition_number": 40.0,
+    "minimum_distance_A": 0.4
+  }
+}</script>
+<script>
+const labels = {
+  composition: '元素组成', valence: 'Fe 平均形式价态', capacity: '理论比容量',
+  cell: '晶胞约束', pbc: 'PBC 最小距离', coordination: '配位约束',
+  polyhedra: '多面体几何', oxygen_coverage: '氧覆盖', energy: '稳定性 / E_hull',
+  force: '原子力收敛', relaxation: '弛豫设置', novelty: '新颖性',
+  optimization: 'ShootingFlow 优化权重', source_precheck: '生成前安全预检查',
+  enabled: '启用', elements: '元素集合', require_all_elements: '要求全部元素出现',
+  fixed_counts: '固定元素计数', fe_min: 'Fe 形式价态下限', fe_max: 'Fe 形式价态上限',
+  min_mAh_g: '容量下限', volume_per_atom_A3: '体积范围', primitive_atom_count: '原胞原子数范围',
+  generic_radius_fraction: '通用半径分数', pair_minima_A: '成对最小距离',
+  P: 'P 位点', Fe: 'Fe 位点', allowed: '允许配位数', cutoff_A: '成键 cutoff',
+  require_center_inside: '中心严格位于多面体内', fe_shared_oxygen_max: 'Fe 多面体最大共享 O 数',
+  forbid_coplanar_faces: '禁止共面三角面', minimum_face_angle_deg: '最小面角',
+  require_all: '要求全部 O 覆盖', hull_max_eV_atom: 'E_hull 上限',
+  max_eV_A: '最大力', maxstep_A: 'FIRE 最大步长', max_steps: 'FIRE 最大步数',
+  max_force_eV_A: 'FIRE 力收敛阈值', refine_max_steps: '精修最大步数',
+  refine_trigger_force_eV_A: '精修触发力', refine_trigger_hull_eV_atom: '精修触发 hull',
+  strip_elements: '去骨架元素', require_structure_nonmatch: '禁止已知结构匹配',
+  require_topology_nonmatch: '禁止拓扑匹配', minimum_descriptor_distance: '最小描述符距离',
+  energy_weight: '能量权重', distance_weight: '距离权重', p_coordination_weight: 'P 配位权重',
+  fe_coordination_weight: 'Fe 配位权重', volume_weight: '体积权重', source_prior_weight: '源先验权重',
+  max_cell_condition_number: '最大晶胞条件数', minimum_distance_A: '最小距离',
+  min: '下限', max: '上限',
+  schema_version: 'Schema 版本', name: '配置名称'
+};
+
+const sectionKeys = new Set(['composition','valence','capacity','cell','pbc','coordination','polyhedra','oxygen_coverage','energy','force','relaxation','novelty','optimization','source_precheck']);
+const defaults = JSON.parse(document.getElementById('defaults').textContent);
+let current = structuredClone(defaults);
+
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function merge(base, incoming) {
+  if (Array.isArray(base)) return Array.isArray(incoming) ? clone(incoming) : clone(base);
+  if (base && typeof base === 'object') {
+    const out = clone(base);
+    if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+      for (const [key, value] of Object.entries(incoming)) out[key] = key in out ? merge(out[key], value) : clone(value);
+    }
+    return out;
+  }
+  return incoming === undefined ? base : incoming;
+}
+function labelFor(key) { return labels[key] || key.replaceAll('_', ' '); }
+function inputValue(value) { return Array.isArray(value) ? value.join(', ') : value; }
+
+function renderField(path, key, value) {
+  const row = document.createElement('div');
+  row.className = 'field';
+  const label = document.createElement('label');
+  label.innerHTML = labelFor(key);
+  const control = document.createElement('span');
+  const inputId = path.join('.');
+  if (typeof value === 'boolean') {
+    const input = document.createElement('input');
+    input.type = 'checkbox'; input.checked = value; input.id = inputId;
+    input.addEventListener('change', () => setPath(path, input.checked));
+    control.appendChild(input);
+  } else if (typeof value === 'number') {
+    const input = document.createElement('input');
+    input.type = 'number'; input.step = 'any'; input.value = value; input.id = inputId;
+    input.addEventListener('change', () => setPath(path, Number(input.value)));
+    control.appendChild(input);
+  } else if (Array.isArray(value)) {
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = inputValue(value); input.id = inputId;
+    input.placeholder = value.every(v => Number.isInteger(v)) ? '例如 4, 5' : '逗号分隔';
+    input.addEventListener('change', () => {
+      const parts = input.value.split(',').map(x => x.trim()).filter(Boolean);
+      setPath(path, parts.map(x => value.every(v => Number.isInteger(v)) ? Number(x) : x));
+    });
+    control.appendChild(input);
+  } else {
+    const span = document.createElement('span');
+    span.textContent = String(value);
+    control.appendChild(span);
+  }
+  row.append(label, control);
+  return row;
+}
+
+function renderObject(path, object, title = null) {
+  if (title) {
+    const details = document.createElement('details');
+    details.className = 'section'; details.open = true;
+    const summary = document.createElement('summary'); summary.textContent = title;
+    const body = document.createElement('div'); body.className = 'section-body';
+    for (const [key, value] of Object.entries(object)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) body.appendChild(renderObject([...path, key], value, labelFor(key)));
+      else body.appendChild(renderField([...path, key], key, value));
+    }
+    details.append(summary, body);
+    return details;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const [key, value] of Object.entries(object)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) fragment.appendChild(renderObject([...path, key], value, labelFor(key)));
+    else fragment.appendChild(renderField([...path, key], key, value));
+  }
+  return fragment;
+}
+
+function setPath(path, value) {
+  let target = current;
+  for (let i = 0; i < path.length - 1; i++) target = target[path[i]];
+  target[path[path.length - 1]] = value;
+  update();
+}
+function validate() {
+  const errors = [];
+  if (current.schema_version !== 'shootingcsp.constraints.v1') errors.push('schema_version 必须是 shootingcsp.constraints.v1');
+  for (const key of sectionKeys) if (!(key in current)) errors.push(`缺少 section: ${key}`);
+  const fe = current.coordination?.Fe?.allowed || [];
+  if (!fe.length || fe.some(x => ![4,5,6].includes(x))) errors.push('Fe allowed 必须非空且属于 {4,5,6}');
+  const pairs = current.cell?.volume_per_atom_A3;
+  if (pairs && Number(pairs.min) > Number(pairs.max)) errors.push('体积下限不能大于上限');
+  const n = current.cell?.primitive_atom_count;
+  if (n && Number(n.min) > Number(n.max)) errors.push('原胞原子数下限不能大于上限');
+  return errors;
+}
+function update() {
+  document.getElementById('preview').textContent = JSON.stringify(current, null, 2);
+  const errors = validate();
+  const status = document.getElementById('status');
+  status.textContent = errors.length ? errors.join('；') : '配置有效，可以导出。';
+  status.className = errors.length ? 'error' : '';
+  document.getElementById('command').textContent = `shootingcsp-generate \
+  --constraints shootingcsp.constraints.json \
+  --flow /path/to/flow.pt \
+  --profile /path/to/profile.json \
+  --surrogate uma \
+  --surrogate-checkpoint /path/to/uma.pt \
+  --out /path/to/output`;
+}
+function render() { const form = document.getElementById('form'); form.replaceChildren(); form.appendChild(renderObject([], current)); update(); }
+document.getElementById('exportButton').addEventListener('click', () => {
+  if (validate().length) return;
+  const blob = new Blob([JSON.stringify(current, null, 2) + '\n'], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'shootingcsp.constraints.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('copyButton').addEventListener('click', async () => {
+  await navigator.clipboard.writeText(document.getElementById('command').textContent);
+  document.getElementById('status').textContent = '运行命令已复制。';
+});
+document.getElementById('resetButton').addEventListener('click', () => { current = clone(defaults); render(); });
+document.getElementById('importFile').addEventListener('change', async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    current = merge(defaults, JSON.parse(await file.text()));
+    render();
+    document.getElementById('status').textContent = 'JSON 导入完成。';
+  } catch (error) { document.getElementById('status').textContent = `导入失败：${error.message}`; document.getElementById('status').className = 'error'; }
+});
+render();
+</script>
+</body>
+</html>

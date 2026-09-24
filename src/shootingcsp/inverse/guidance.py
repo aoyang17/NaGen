@@ -16,6 +16,7 @@ from .sample import integrate_flow
 from .spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     DEFAULT_SPEC,
+    OptimizationSpec,
     normalize_fe_coordination_options,
 )
 
@@ -41,8 +42,11 @@ class TerminalWeights:
     lattice_displacement: float = 0.02
 
 
-def _constant_tables(device: torch.device, dtype: torch.dtype):
-    spec = DEFAULT_SPEC
+def _constant_tables(
+    device: torch.device,
+    dtype: torch.dtype,
+    spec: OptimizationSpec = DEFAULT_SPEC,
+):
     elements = spec.elements
     minima = torch.tensor(
         [[minimum_distance(a, b, spec) for b in elements] for a in elements],
@@ -60,6 +64,8 @@ def soft_constraint_terms(
     bond_temperature_A: float = 0.10,
     probabilities_override: torch.Tensor | None = None,
     fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS,
+    p_coordination_options: tuple[int, ...] = DEFAULT_SPEC.p_coordination_options,
+    spec: OptimizationSpec = DEFAULT_SPEC,
 ) -> dict[str, torch.Tensor]:
     """Smooth penalties corresponding to the exact post-generation checks."""
     dtype = terminal.atom.dtype
@@ -84,7 +90,7 @@ def soft_constraint_terms(
     )
     upper_pairs = valid_pairs & upper
 
-    minima = _constant_tables(mask.device, dtype)
+    minima = _constant_tables(mask.device, dtype, spec)
     expected_minimum = torch.einsum(
         "biv,vw,bjw->bij", probabilities, minima, probabilities
     )
@@ -103,18 +109,26 @@ def soft_constraint_terms(
     o_probability = probabilities[..., element_to_offset["O"]]
     fe_probability = probabilities[..., element_to_offset["Fe"]]
     po_bonds = torch.sigmoid(
-        (DEFAULT_SPEC.p_o_bond_cutoff - distances) / bond_temperature_A
+        (spec.p_o_bond_cutoff - distances) / bond_temperature_A
     ) * o_probability[:, None, :]
     fe_o_bonds = torch.sigmoid(
-        (DEFAULT_SPEC.fe_o_bond_cutoff - distances) / bond_temperature_A
+        (spec.fe_o_bond_cutoff - distances) / bond_temperature_A
     ) * o_probability[:, None, :]
     diagonal = torch.eye(mask.shape[1], dtype=torch.bool, device=mask.device)[None]
     po_bonds = po_bonds.masked_fill(diagonal | ~valid_pairs, 0.0)
     fe_o_bonds = fe_o_bonds.masked_fill(diagonal | ~valid_pairs, 0.0)
     p_coordination = po_bonds.sum(dim=-1)
     fe_coordination = fe_o_bonds.sum(dim=-1)
+    allowed_p_counts = torch.tensor(
+        tuple(sorted({int(value) for value in p_coordination_options})),
+        dtype=dtype,
+        device=mask.device,
+    )
+    p_interval_violation = (
+        p_coordination.unsqueeze(0) - allowed_p_counts[:, None, None]
+    ).square().amin(dim=0)
     p_coordination_loss = (
-        p_probability * (p_coordination - 4.0).square()
+        p_probability * p_interval_violation
     ).sum() / p_probability.sum().clamp_min(1.0)
     allowed_fe_counts = torch.tensor(
         normalize_fe_coordination_options(fe_coordination_options),
@@ -130,8 +144,8 @@ def soft_constraint_terms(
     volume = torch.linalg.det(lattice)
     volume_per_atom = volume / n_atoms.clamp_min(1.0)
     volume_loss = (
-        F.relu(DEFAULT_SPEC.volume_per_atom_min_A3 - volume_per_atom).square()
-        + F.relu(volume_per_atom - DEFAULT_SPEC.volume_per_atom_max_A3).square()
+        F.relu(spec.volume_per_atom_min_A3 - volume_per_atom).square()
+        + F.relu(volume_per_atom - spec.volume_per_atom_max_A3).square()
     ).mean()
     return {
         "distance": distance_loss,

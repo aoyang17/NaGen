@@ -46,7 +46,24 @@ python -m shootingcsp.training.train_flow --help
 数据集适配器和独立 surrogate model 接口见
 [TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md)。
 
-当前版本为 `0.1.0`，采用 Apache License 2.0。引用信息见 `CITATION.cff`。
+当前版本为 `0.2.0`，采用 Apache License 2.0。引用信息见 `CITATION.cff`。
+
+## 约束驱动生成
+
+所有物理约束、目标阈值和 ShootingFlow 软约束权重均由版本化 JSON 配置控制。用户可以直接填写离线约束表：
+
+```text
+docs/shootingflow_constraint_builder.html
+```
+
+导出 `shootingcsp.constraints.json` 后运行：
+
+```bash
+shootingcsp-validate-constraints --constraints shootingcsp.constraints.json
+shootingcsp-generate   --constraints shootingcsp.constraints.json   --flow /path/to/flow.pt   --profile /path/to/profile.json   --surrogate uma   --surrogate-checkpoint /path/to/uma.pt   --out /path/to/output
+```
+
+详细说明见 [ConstraintConfiguration.md](docs/ConstraintConfiguration.md)。
 
 ## 一、晶体表示
 

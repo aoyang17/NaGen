@@ -39,8 +39,27 @@ python -m shootingcsp.training.train_flow --help
 Dataset adapters and independent surrogate-model interfaces are documented in
 [TrainingAndSurrogateInterfaces.md](docs/TrainingAndSurrogateInterfaces.md).
 
-The initial library release is version `0.1.0` under the Apache License 2.0. Citation
+The initial library release is version `0.2.0` under the Apache License 2.0. Citation
 metadata is provided in `CITATION.cff`.
+
+## Constraint-driven generation
+
+All physical constraints, objective thresholds, and ShootingFlow soft-penalty
+weights are controlled by a versioned JSON configuration. Users can fill the
+offline constraint builder at:
+
+```text
+docs/shootingflow_constraint_builder.html
+```
+
+After exporting `shootingcsp.constraints.json`:
+
+```bash
+shootingcsp-validate-constraints --constraints shootingcsp.constraints.json
+shootingcsp-generate   --constraints shootingcsp.constraints.json   --flow /path/to/flow.pt   --profile /path/to/profile.json   --surrogate uma   --surrogate-checkpoint /path/to/uma.pt   --out /path/to/output
+```
+
+See [ConstraintConfiguration.md](docs/ConstraintConfiguration.md) for details.
 
 ## Crystal representation
 

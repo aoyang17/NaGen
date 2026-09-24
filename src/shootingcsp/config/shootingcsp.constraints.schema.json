@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aoyang17/ShootingCSP/configs/constraints/shootingcsp.constraints.schema.json",
+  "title": "ShootingCSP constraint configuration",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "composition",
+    "valence",
+    "capacity",
+    "cell",
+    "pbc",
+    "coordination",
+    "polyhedra",
+    "oxygen_coverage",
+    "energy",
+    "force",
+    "relaxation",
+    "novelty",
+    "optimization",
+    "source_precheck"
+  ],
+  "properties": {
+    "schema_version": {"const": "shootingcsp.constraints.v1"},
+    "name": {"type": "string"},
+    "composition": {
+      "type": "object",
+      "required": ["enabled", "elements", "require_all_elements", "fixed_counts"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "elements": {"type": "array", "items": {"enum": ["Na", "Fe", "P", "O"]}, "minItems": 1, "uniqueItems": true},
+        "require_all_elements": {"type": "boolean"},
+        "fixed_counts": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "valence": {
+      "type": "object",
+      "required": ["enabled", "fe_min", "fe_max"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "fe_min": {"type": "number"},
+        "fe_max": {"type": "number"}
+      }
+    },
+    "capacity": {
+      "type": "object",
+      "required": ["enabled", "min_mAh_g"],
+      "properties": {"enabled": {"type": "boolean"}, "min_mAh_g": {"type": "number", "minimum": 0}}
+    },
+    "cell": {
+      "type": "object",
+      "required": ["volume_per_atom_A3", "primitive_atom_count"],
+      "properties": {
+        "volume_per_atom_A3": {"$ref": "#/$defs/range"},
+        "primitive_atom_count": {"$ref": "#/$defs/intRange"}
+      }
+    },
+    "pbc": {
+      "type": "object",
+      "required": ["enabled", "generic_radius_fraction", "pair_minima_A"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "generic_radius_fraction": {"type": "number", "minimum": 0},
+        "pair_minima_A": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}}
+      }
+    },
+    "coordination": {
+      "type": "object",
+      "required": ["P", "Fe"],
+      "properties": {"P": {"$ref": "#/$defs/coordination"}, "Fe": {"$ref": "#/$defs/coordination"}}
+    },
+    "polyhedra": {
+      "type": "object",
+      "required": ["enabled", "require_center_inside", "fe_shared_oxygen_max", "forbid_coplanar_faces", "minimum_face_angle_deg"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "require_center_inside": {"type": "boolean"},
+        "fe_shared_oxygen_max": {"type": "integer", "minimum": 0},
+        "forbid_coplanar_faces": {"type": "boolean"},
+        "minimum_face_angle_deg": {"type": "number", "minimum": 0, "maximum": 180}
+      }
+    },
+    "oxygen_coverage": {
+      "type": "object",
+      "required": ["enabled", "require_all"],
+      "properties": {"enabled": {"type": "boolean"}, "require_all": {"type": "boolean"}}
+    },
+    "energy": {
+      "type": "object",
+      "required": ["enabled", "hull_max_eV_atom"],
+      "properties": {"enabled": {"type": "boolean"}, "hull_max_eV_atom": {"type": "number", "minimum": 0}}
+    },
+    "force": {
+      "type": "object",
+      "required": ["enabled", "max_eV_A"],
+      "properties": {"enabled": {"type": "boolean"}, "max_eV_A": {"type": "number", "minimum": 0}}
+    },
+    "relaxation": {
+      "type": "object",
+      "required": ["enabled", "maxstep_A", "max_steps", "max_force_eV_A", "refine_max_steps", "refine_trigger_force_eV_A", "refine_trigger_hull_eV_atom"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "maxstep_A": {"type": "number", "exclusiveMinimum": 0},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_force_eV_A": {"type": "number", "minimum": 0},
+        "refine_max_steps": {"type": "integer", "minimum": 0},
+        "refine_trigger_force_eV_A": {"type": "number", "minimum": 0},
+        "refine_trigger_hull_eV_atom": {"type": "number", "minimum": 0}
+      }
+    },
+    "novelty": {
+      "type": "object",
+      "required": ["enabled", "strip_elements", "require_structure_nonmatch", "require_topology_nonmatch", "minimum_descriptor_distance"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "strip_elements": {"type": "array", "items": {"enum": ["Na", "Fe", "P", "O"]}, "uniqueItems": true},
+        "require_structure_nonmatch": {"type": "boolean"},
+        "require_topology_nonmatch": {"type": "boolean"},
+        "minimum_descriptor_distance": {"type": "number", "minimum": 0}
+      }
+    },
+    "optimization": {
+      "type": "object",
+      "required": ["energy_weight", "distance_weight", "p_coordination_weight", "fe_coordination_weight", "volume_weight", "source_prior_weight"],
+      "properties": {
+        "energy_weight": {"type": "number", "minimum": 0},
+        "distance_weight": {"type": "number", "minimum": 0},
+        "p_coordination_weight": {"type": "number", "minimum": 0},
+        "fe_coordination_weight": {"type": "number", "minimum": 0},
+        "volume_weight": {"type": "number", "minimum": 0},
+        "source_prior_weight": {"type": "number", "minimum": 0}
+      }
+    },
+    "source_precheck": {
+      "type": "object",
+      "required": ["enabled", "volume_per_atom_A3", "max_cell_condition_number", "minimum_distance_A"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "volume_per_atom_A3": {"$ref": "#/$defs/range"},
+        "max_cell_condition_number": {"type": "number", "exclusiveMinimum": 0},
+        "minimum_distance_A": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "required": ["enabled", "min", "max"],
+      "properties": {"enabled": {"type": "boolean"}, "min": {"type": "number"}, "max": {"type": "number"}}
+    },
+    "intRange": {
+      "type": "object",
+      "required": ["enabled", "min", "max"],
+      "properties": {"enabled": {"type": "boolean"}, "min": {"type": "integer"}, "max": {"type": "integer"}}
+    },
+    "coordination": {
+      "type": "object",
+      "required": ["enabled", "allowed", "cutoff_A"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "allowed": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1, "uniqueItems": true},
+        "cutoff_A": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}

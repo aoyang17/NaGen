@@ -84,8 +84,16 @@ class OptimizationSpec:
     hull_max_eV_atom: float = 0.150
     faraday_C_mol: float = 96485.33212
     fe_coordination_options: tuple[int, ...] = DEFAULT_FE_COORDINATION_OPTIONS
+    p_coordination_options: tuple[int, ...] = (4,)
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "p_coordination_options",
+            tuple(sorted({int(value) for value in self.p_coordination_options})),
+        )
+        if not self.p_coordination_options or any(value < 1 for value in self.p_coordination_options):
+            raise ValueError("P coordination options must be a non-empty set of positive integers")
         object.__setattr__(
             self,
             "fe_coordination_options",

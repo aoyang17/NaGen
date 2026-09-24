@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shootingcsp"
-version = "0.1.0"
+version = "0.2.0"
 description = "ShootingCSP: constrained crystal structure prediction powered by ShootingFlow"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -57,6 +57,8 @@ dev = [
 ]
 
 [project.scripts]
+shootingcsp-validate-constraints = "shootingcsp.config.__main__:main"
+shootingcsp-generate = "shootingcsp.cli.generate:main"
 shootingcsp-train-flow = "shootingcsp.training.train_flow:main"
 
 [project.urls]
@@ -71,7 +73,7 @@ include = ["shootingcsp*"]
 exclude = ["test*"]
 
 [tool.setuptools.package-data]
-shootingcsp = ["py.typed"]
+shootingcsp = ["py.typed", "config/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
