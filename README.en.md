@@ -142,3 +142,46 @@ tools/launch_uma_campaign.sh
 Use `tools/launch_uma_campaign.sh --audit` to revalidate the campaign's
 exported CIFs. See [UMACampaign24.md](docs/UMACampaign24.md) for the frozen
 protocol and artifact layout.
+
+## Gallery
+
+Eight of the 19 validated Na–Fe–P–O structures are shown below in a random sample. Files follow `Sxx_LE_n4_n5_n6_Eh_vv_Q.png`, where `n4`, `n5`, and `n6` are the numbers of FeO<sub>4</sub>, FeO<sub>5</sub>, and FeO<sub>6</sub> centers, `vv` is the MP2020 E<sub>hull</sub> in meV/atom, and `Q` is `T`/`F` for an unmatched/matched known structure. Click an image to open the full-resolution file; [view all 19 structures](asset/crystal/).
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S10_LE_3_3_0_Eh_154_T.png"><img src="asset/crystal/S10_LE_3_3_0_Eh_154_T.png" width="220" alt="S10_LE_3_3_0_Eh_154_T"></a><br>
+      <sub><b>S10</b> · LE 3/3/0 · E<sub>hull</sub> 154 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S08_LE_2_3_1_Eh_156_T.png"><img src="asset/crystal/S08_LE_2_3_1_Eh_156_T.png" width="220" alt="S08_LE_2_3_1_Eh_156_T"></a><br>
+      <sub><b>S08</b> · LE 2/3/1 · E<sub>hull</sub> 156 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S03_LE_1_4_1_Eh_168_T.png"><img src="asset/crystal/S03_LE_1_4_1_Eh_168_T.png" width="220" alt="S03_LE_1_4_1_Eh_168_T"></a><br>
+      <sub><b>S03</b> · LE 1/4/1 · E<sub>hull</sub> 168 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S13_LE_3_1_2_Eh_141_T.png"><img src="asset/crystal/S13_LE_3_1_2_Eh_141_T.png" width="220" alt="S13_LE_3_1_2_Eh_141_T"></a><br>
+      <sub><b>S13</b> · LE 3/1/2 · E<sub>hull</sub> 141 meV/atom</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S06_LE_1_4_1_Eh_122_T.png"><img src="asset/crystal/S06_LE_1_4_1_Eh_122_T.png" width="220" alt="S06_LE_1_4_1_Eh_122_T"></a><br>
+      <sub><b>S06</b> · LE 1/4/1 · E<sub>hull</sub> 122 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S11_LE_2_2_2_Eh_145_T.png"><img src="asset/crystal/S11_LE_2_2_2_Eh_145_T.png" width="220" alt="S11_LE_2_2_2_Eh_145_T"></a><br>
+      <sub><b>S11</b> · LE 2/2/2 · E<sub>hull</sub> 145 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S19_LE_0_5_1_Eh_141_T.png"><img src="asset/crystal/S19_LE_0_5_1_Eh_141_T.png" width="220" alt="S19_LE_0_5_1_Eh_141_T"></a><br>
+      <sub><b>S19</b> · LE 0/5/1 · E<sub>hull</sub> 141 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S14_LE_1_4_1_Eh_158_T.png"><img src="asset/crystal/S14_LE_1_4_1_Eh_158_T.png" width="220" alt="S14_LE_1_4_1_Eh_158_T"></a><br>
+      <sub><b>S14</b> · LE 1/4/1 · E<sub>hull</sub> 158 meV/atom</sub>
+    </td>
+  </tr>
+</table>

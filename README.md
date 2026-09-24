@@ -142,3 +142,46 @@ tools/launch_uma_campaign.sh
 ```
 
 使用 `tools/launch_uma_campaign.sh --audit` 可重新验证 campaign 导出的 CIF。
+
+## Gallery
+
+下面从 19 个通过筛选的 Na–Fe–P–O 结构中随机抽取 8 个展示。文件命名格式为 `Sxx_LE_n4_n5_n6_Eh_vv_Q.png`，其中 `n4`、`n5`、`n6` 分别表示 FeO<sub>4</sub>、FeO<sub>5</sub>、FeO<sub>6</sub> 的数量，`vv` 为 MP2020 E<sub>hull</sub>（meV/atom），`Q` 为 `T`/`F`，表示未匹配/匹配已知结构。点击图片可查看原图；[查看全部 19 个结构](asset/crystal/)。
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S10_LE_3_3_0_Eh_154_T.png"><img src="asset/crystal/S10_LE_3_3_0_Eh_154_T.png" width="220" alt="S10_LE_3_3_0_Eh_154_T"></a><br>
+      <sub><b>S10</b> · LE 3/3/0 · E<sub>hull</sub> 154 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S08_LE_2_3_1_Eh_156_T.png"><img src="asset/crystal/S08_LE_2_3_1_Eh_156_T.png" width="220" alt="S08_LE_2_3_1_Eh_156_T"></a><br>
+      <sub><b>S08</b> · LE 2/3/1 · E<sub>hull</sub> 156 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S03_LE_1_4_1_Eh_168_T.png"><img src="asset/crystal/S03_LE_1_4_1_Eh_168_T.png" width="220" alt="S03_LE_1_4_1_Eh_168_T"></a><br>
+      <sub><b>S03</b> · LE 1/4/1 · E<sub>hull</sub> 168 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S13_LE_3_1_2_Eh_141_T.png"><img src="asset/crystal/S13_LE_3_1_2_Eh_141_T.png" width="220" alt="S13_LE_3_1_2_Eh_141_T"></a><br>
+      <sub><b>S13</b> · LE 3/1/2 · E<sub>hull</sub> 141 meV/atom</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S06_LE_1_4_1_Eh_122_T.png"><img src="asset/crystal/S06_LE_1_4_1_Eh_122_T.png" width="220" alt="S06_LE_1_4_1_Eh_122_T"></a><br>
+      <sub><b>S06</b> · LE 1/4/1 · E<sub>hull</sub> 122 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S11_LE_2_2_2_Eh_145_T.png"><img src="asset/crystal/S11_LE_2_2_2_Eh_145_T.png" width="220" alt="S11_LE_2_2_2_Eh_145_T"></a><br>
+      <sub><b>S11</b> · LE 2/2/2 · E<sub>hull</sub> 145 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S19_LE_0_5_1_Eh_141_T.png"><img src="asset/crystal/S19_LE_0_5_1_Eh_141_T.png" width="220" alt="S19_LE_0_5_1_Eh_141_T"></a><br>
+      <sub><b>S19</b> · LE 0/5/1 · E<sub>hull</sub> 141 meV/atom</sub>
+    </td>
+    <td align="center" width="25%">
+      <a href="asset/crystal/S14_LE_1_4_1_Eh_158_T.png"><img src="asset/crystal/S14_LE_1_4_1_Eh_158_T.png" width="220" alt="S14_LE_1_4_1_Eh_158_T"></a><br>
+      <sub><b>S14</b> · LE 1/4/1 · E<sub>hull</sub> 158 meV/atom</sub>
+    </td>
+  </tr>
+</table>
