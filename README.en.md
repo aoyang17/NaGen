@@ -147,6 +147,13 @@ protocol and artifact layout.
 
 Eight of the 19 validated Na–Fe–P–O structures are shown below in a random sample. Files follow `Sxx_LE_n4_n5_n6_Eh_vv_Q.png`, where `n4`, `n5`, and `n6` are the numbers of FeO<sub>4</sub>, FeO<sub>5</sub>, and FeO<sub>6</sub> centers, `vv` is the MP2020 E<sub>hull</sub> in meV/atom, and `Q` is `T`/`F` for an unmatched/matched known structure. Click an image to open the full-resolution file; [view all 19 structures](asset/crystal/).
 
+CIF and VESTA PNG outputs now share one stem generated globally by `shootingcsp.naming`. Final selected outputs use `Sxx_LE_n4_n5_n6_Eh_vv_Q.{cif,png}`; intermediate exports not yet audited for hull/novelty use `Eh_NA_U`. Use the global CLI to inspect names or render the PNG headlessly:
+
+```bash
+shootingcsp-name-output --index 1 --n4 0 --n5 5 --n6 1 --eh-meV-atom 143 --kind paths
+shootingcsp-render-vesta --cif selected/S01_LE_0_5_1_Eh_143_T.cif
+```
+
 <table>
   <tr>
     <td align="center" width="25%">

@@ -23,6 +23,7 @@ from .spec import (
     OptimizationSpec,
     parse_fe_coordination_options,
 )
+from shootingcsp.naming import build_output_stem, fe_coordination_counts_from_sites
 
 
 def load_model(path: str, device: torch.device, use_ema: bool = True):
@@ -423,8 +424,24 @@ def export_samples(
             spec=OptimizationSpec(fe_coordination_options=fe_coordination_options),
         )
         nearest = int(nearest_index[row])
+        fe_counts = fe_coordination_counts_from_sites(
+            feasibility["details"]["coordination"]
+        )
+        output_name = build_output_stem(
+            row + 1,
+            fe_counts,
+            None,
+            None,
+        )
+        cif_name = f"{output_name}.cif"
         record = {
             "candidate_id": f"ShootingCSP-flow-{seed}-{row:05d}",
+            "output_index": row + 1,
+            "output_name": output_name,
+            "output_files": {
+                "cif": cif_name,
+                "vesta_png": f"{output_name}.png",
+            },
             "seed": seed,
             "N": n_atoms,
             "formula": structure.composition.formula,
@@ -455,7 +472,7 @@ def export_samples(
             },
         }
         records.append(record)
-        structure.to(filename=str(cif_directory / f"candidate_{row:05d}.cif"))
+        structure.to(filename=str(cif_directory / cif_name))
     with open(output, "w") as handle:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")

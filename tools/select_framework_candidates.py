@@ -13,6 +13,7 @@ from pymatgen.io.cif import CifWriter
 from shootingcsp.selection.audit import load_crystals
 from shootingcsp.selection.diversity import descriptor,distances,DESCRIPTOR_VERSION
 from shootingcsp.inverse._io import sha256_file as sha256
+from shootingcsp.naming import build_output_stem_from_records
 from shootingcsp.selection.hull import ReferenceHull
 from shootingcsp.selection.pipeline import Crystal,neighbors,robust_rank,diversity_select
 
@@ -77,11 +78,13 @@ def main():
     pair_matches=[(chosen[i]['id'],chosen[j]['id']) for i,j in itertools.combinations(range(len(chosen)),2) if matcher.fit(chosen_struct[i],chosen_struct[j])]
     if pair_matches: raise RuntimeError(f'selected framework duplicates: {pair_matches}')
     cif=out/'CIF'; cif.mkdir(); manifest=[]
-    for row in chosen:
-        id=row['id']; path=cif/f'{id}.cif'; CifWriter(structure(final[id]),significant_figures=10).write_file(path)
+    for output_index,row in enumerate(chosen,1):
+        id=row['id']; novelty_audit=next(x for x in novelty if x['id']==id)
+        output_name=build_output_stem_from_records(output_index,row,row['reference_hull'],novelty_audit)
+        path=cif/f'{output_name}.cif'; CifWriter(structure(final[id]),significant_figures=10).write_file(path)
         if not StructureMatcher(ltol=1e-6,stol=1e-5,angle_tol=1e-5,primitive_cell=False,scale=False).fit(structure(final[id]),Structure.from_file(path)):
             raise RuntimeError(f'CIF round-trip failed: {id}')
-        manifest.append({'id':id,'file':path.name,'sha256':sha256(path),'metrics':row['metrics'],'reference_hull':row['reference_hull'],'generation':generated[id]['generation'],'framework_novelty':next(x for x in novelty if x['id']==id)})
+        manifest.append({'id':id,'output_index':output_index,'output_name':output_name,'file':path.name,'vesta_png':f'{output_name}.png','sha256':sha256(path),'metrics':row['metrics'],'reference_hull':row['reference_hull'],'generation':generated[id]['generation'],'framework_novelty':novelty_audit})
     (cif/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     summary={'status':'completed','attempted':len(pairs),'hard_feasible':sum(r['gates']['after']['passed'] for r in pairs.values()),'hull_threshold_passing':len(feasible),'framework_novelty_eligible':len(eligible),'selected':len(chosen),'selected_ids':[x['id'] for x in chosen],'pair_matches':pair_matches,'known_framework_references':len(refs),'framework_descriptor':DESCRIPTOR_VERSION,'ranking_metrics':metrics,'minimax_order':[x['id'] for x in ranked],'novelty_audit':novelty,'finite_reference_sha256':hull.hash,'known_hashes':{s:sha256(Path(args.known)/f'{s}.jsonl') for s in ('train','val','test')},'note':'Novelty uses Fe-P-O only; Na is removed. Requires both StructureMatcher and coordination-graph non-equivalence before farthest-first diversity.'}
     (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n'); print(json.dumps({k:v for k,v in summary.items() if k not in ('novelty_audit','minimax_order')},indent=2))

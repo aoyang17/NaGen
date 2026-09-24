@@ -29,6 +29,7 @@ from shootingcsp.inverse.spec import (
     DEFAULT_FE_COORDINATION_OPTIONS,
     parse_fe_coordination_options,
 )
+from shootingcsp.naming import build_output_stem_from_records, parse_output_index
 from shootingcsp.selection.hull import ReferenceHull
 from shootingcsp.selection.pipeline import Crystal, Conditioning, hard_gates
 
@@ -381,6 +382,15 @@ class Collector:
         for path in sorted((self.out / "selected").glob("*.audit.json")):
             entry = json.loads(path.read_text())
             self._register(entry)
+        self._next_output_index = 1 + max(
+            (
+                index
+                for entry in self.selected
+                for index in [parse_output_index(Path(entry["file"]).stem)]
+                if index is not None
+            ),
+            default=0,
+        )
 
     def _register(self, entry):
         if sha256(self.out / "selected" / entry["file"]) != entry["sha256"]:
@@ -440,14 +450,26 @@ class Collector:
         accepted = not (pre or post or topology or duplicates) and nearest >= 1e-4 and (selected_distance is None or selected_distance >= 1e-4)
         if not accepted:
             return {"status": "novelty_or_duplicate_rejected", "framework_novelty": audit}
-        path = self.out / "selected" / f"{row['id']}.cif"
+        output_index = self._next_output_index
+        output_name = build_output_stem_from_records(
+            output_index,
+            gates,
+            hr,
+            audit,
+        )
+        path = self.out / "selected" / f"{output_name}.cif"
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            raise FileExistsError(f"selected output already exists: {path}")
         CifWriter(self.structure(crystal(row["final"])), significant_figures=10).write_file(path)
         roundtrip = StructureMatcher(ltol=1e-6, stol=1e-5, angle_tol=1e-5, primitive_cell=False, scale=False).fit(self.structure(crystal(row["final"])), Structure.from_file(path))
         if not roundtrip:
             raise ValueError(f"CIF round-trip failed: {row['id']}")
+        self._next_output_index += 1
         entry = {**row, "status": "selected_refined", "framework_novelty": audit,
-                 "file": path.name, "sha256": sha256(path), "cif_roundtrip": True}
+                 "output_index": output_index, "output_name": output_name,
+                 "file": path.name, "vesta_png": f"{output_name}.png",
+                 "sha256": sha256(path), "cif_roundtrip": True}
         write_json(path.with_suffix(".audit.json"), entry)
         self._register(entry)
         return {"status": "selected", "framework_novelty": audit}

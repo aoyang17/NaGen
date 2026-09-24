@@ -147,6 +147,13 @@ tools/launch_uma_campaign.sh
 
 下面从 19 个通过筛选的 Na–Fe–P–O 结构中随机抽取 8 个展示。文件命名格式为 `Sxx_LE_n4_n5_n6_Eh_vv_Q.png`，其中 `n4`、`n5`、`n6` 分别表示 FeO<sub>4</sub>、FeO<sub>5</sub>、FeO<sub>6</sub> 的数量，`vv` 为 MP2020 E<sub>hull</sub>（meV/atom），`Q` 为 `T`/`F`，表示未匹配/匹配已知结构。点击图片可查看原图；[查看全部 19 个结构](asset/crystal/)。
 
+CIF 和对应的 VESTA PNG 现在由 `shootingcsp.naming` 全局生成相同 stem。最终筛选结果使用 `Sxx_LE_n4_n5_n6_Eh_vv_Q.{cif,png}`；尚未完成 hull/novelty 审计的中间结果使用 `Eh_NA_U`。可直接检查名称或调用无界面 VESTA 导出：
+
+```bash
+shootingcsp-name-output --index 1 --n4 0 --n5 5 --n6 1 --eh-meV-atom 143 --kind paths
+shootingcsp-render-vesta --cif selected/S01_LE_0_5_1_Eh_143_T.cif
+```
+
 <table>
   <tr>
     <td align="center" width="25%">

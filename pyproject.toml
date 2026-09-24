@@ -59,6 +59,8 @@ dev = [
 [project.scripts]
 shootingcsp-validate-constraints = "shootingcsp.config.__main__:main"
 shootingcsp-generate = "shootingcsp.cli.generate:main"
+shootingcsp-name-output = "shootingcsp.naming:main"
+shootingcsp-render-vesta = "shootingcsp.vesta:main"
 shootingcsp-train-flow = "shootingcsp.training.train_flow:main"
 
 [project.urls]

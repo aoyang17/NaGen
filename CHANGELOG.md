@@ -7,6 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Global `shootingcsp-name-output` naming helper for canonical
+  `Sxx_LE_n4_n5_n6_Eh_vv_Q` CIF and VESTA PNG outputs.
+- Headless `shootingcsp-render-vesta` exporter that enforces matching CIF/PNG
+  stems and applies the published Fe-P-O gallery styling.
+
+### Changed
+
+- Campaign, offline-selection, and intermediate CIF writers now use the shared
+  global output naming implementation.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
